@@ -1579,6 +1579,12 @@
           "description": "The path to the `go` binary used to install the Go tools. If it's empty, the same `go` binary chosen for the project will be used for tool installation.",
           "scope": "machine-overridable"
         },
+        "go.toolsManagement.declineAllInstalls": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the notifications to install missing tools will automatically declines, without even prompting.",
+          "scope": "machine-overridable"
+        },
         "go.toolsManagement.checkForUpdates": {
           "type": "string",
           "default": "proxy",

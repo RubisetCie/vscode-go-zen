@@ -173,6 +173,11 @@ export function getCheckForToolsUpdatesConfig(gocfg: vscode.WorkspaceConfigurati
 	return gocfg.get('toolsManagement.checkForUpdates') as string;
 }
 
+// getDeclineAllToolsInstallConfig returns go.toolsManagement.declineAllInstalls configuration.
+export function getDeclineAllToolsInstallConfig(gocfg: vscode.WorkspaceConfiguration) {
+	return gocfg.get('toolsManagement.declineAllInstalls') as boolean;
+}
+
 export function byteOffsetAt(document: vscode.TextDocument, position: vscode.Position): number {
 	const offset = document.offsetAt(position);
 	const text = document.getText();

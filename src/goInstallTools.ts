@@ -33,6 +33,7 @@ import {
 	getBinPath,
 	getBinPathWithExplanation,
 	getCheckForToolsUpdatesConfig,
+	getDeclineAllToolsInstallConfig,
 	getGoVersion,
 	getTempFilePath,
 	getWorkspaceFolderPath,
@@ -379,6 +380,11 @@ export function declinedToolInstall(toolName: string) {
 export async function promptForMissingTool(toolName: string) {
 	const tool = getTool(toolName);
 
+	// If the automatic declining is enabled, don't prompt for it.
+	if (getDeclineAllToolsInstallConfig(getGoConfig())) {
+		return;
+	}
+
 	// If user has declined to install this tool, don't prompt for it.
 	if (declinedToolInstall(toolName)) {
 		return;
@@ -449,6 +455,11 @@ export async function promptForUpdatingTool(
 ) {
 	const tool = getTool(toolName);
 	const toolVersion = { ...tool, version: newVersion }; // ToolWithVersion
+
+	// If the automatic declining is enabled, don't prompt for it.
+	if (getDeclineAllToolsInstallConfig(getGoConfig())) {
+		return;
+	}
 
 	// If user has declined to update, then don't prompt.
 	if (containsTool(declinedUpdates, tool)) {
