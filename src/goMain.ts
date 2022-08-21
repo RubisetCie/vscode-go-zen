@@ -58,7 +58,6 @@ import { clearCacheForTools } from './utils/pathUtils';
 import { WelcomePanel } from './welcome';
 import vscode = require('vscode');
 import { getFormatTool } from './language/legacy/goFormat';
-import { resetSurveyConfigs, showSurveyConfig } from './goSurvey';
 import { ExtensionAPI } from './export';
 import extensionAPI from './extensionAPI';
 import { GoTestExplorer, isVscodeTestingAPIAvailable } from './goTest/explore';
@@ -198,10 +197,6 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 
 	// Go Enviornment switching commands
 	registerCommand('go.environment.choose', chooseGoEnvironment);
-
-	// Survey related commands
-	registerCommand('go.survey.showConfig', showSurveyConfig);
-	registerCommand('go.survey.resetConfig', resetSurveyConfigs);
 
 	addOnDidChangeConfigListeners(ctx);
 	addOnChangeTextDocumentListeners(ctx);

@@ -473,16 +473,6 @@
         "description": "Choose a different Go version or binary for this project. (WIP)"
       },
       {
-        "command": "go.survey.showConfig",
-        "title": "Go: Show Survey Configuration",
-        "description": "Show the current Go survey configuration"
-      },
-      {
-        "command": "go.survey.resetConfig",
-        "title": "Go: Reset Survey Configuration",
-        "description": "Reset the current Go survey configuration history"
-      },
-      {
         "command": "go.workspace.resetState",
         "title": "Go: Reset Workspace State",
         "description": "Reset keys in workspace state to undefined."
@@ -1773,11 +1763,6 @@
             "share": true,
             "run": true
           }
-        },
-        "go.survey.prompt": {
-          "type": "boolean",
-          "default": true,
-          "description": "Prompt for surveys, including the gopls survey and the Go developer survey."
         },
         "go.editorContextMenuCommands": {
           "type": "object",

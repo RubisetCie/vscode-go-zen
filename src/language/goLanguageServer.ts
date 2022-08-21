@@ -53,8 +53,6 @@ import { getToolFromToolPath } from '../utils/pathUtils';
 import WebRequest = require('web-request');
 import { FoldingContext } from 'vscode';
 import { ProvideFoldingRangeSignature } from 'vscode-languageclient/lib/common/foldingRange';
-import { daysBetween, getStateConfig, maybePromptForGoplsSurvey, timeDay, timeMinute } from '../goSurvey';
-import { maybePromptForDeveloperSurvey } from '../goDeveloperSurvey';
 import { CommandFactory } from '../commands';
 import { updateLanguageServerIconGoStatusBar } from '../goStatus';
 
@@ -118,8 +116,7 @@ export class Restart {
 
 // scheduleGoplsSuggestions sets timeouts for the various gopls-specific
 // suggestions. We check user's gopls versions once per day to prompt users to
-// update to the latest version. We also check if we should prompt users to
-// fill out the survey.
+// update to the latest version.
 export function scheduleGoplsSuggestions(goCtx: GoExtensionContext) {
 	if (extensionInfo.isInCloudIDE) {
 		return;
@@ -164,82 +161,7 @@ export function scheduleGoplsSuggestions(goCtx: GoExtensionContext) {
 		}
 		await installGopls(cfg);
 	};
-	const survey = async () => {
-		setTimeout(survey, timeDay);
-
-		// Only prompt for the survey if the user is working on Go code.
-		let foundGo = false;
-		for (const doc of vscode.workspace.textDocuments) {
-			if (doc.languageId === 'go') {
-				foundGo = true;
-			}
-		}
-		if (!foundGo) {
-			return;
-		}
-		maybePromptForGoplsSurvey(goCtx);
-		maybePromptForDeveloperSurvey(goCtx);
-	};
 	setTimeout(update, 10 * timeMinute);
-	setTimeout(survey, 30 * timeMinute);
-}
-
-// Ask users to fill out opt-out survey.
-export async function promptAboutGoplsOptOut(goCtx: GoExtensionContext) {
-	// Check if the configuration is set in the workspace.
-	const useLanguageServer = getGoConfig().inspect('useLanguageServer');
-	const workspace = useLanguageServer?.workspaceFolderValue === false || useLanguageServer?.workspaceValue === false;
-
-	let cfg = getGoplsOptOutConfig(workspace);
-	const promptFn = async (): Promise<GoplsOptOutConfig> => {
-		if (cfg.prompt === false) {
-			return cfg;
-		}
-		// Prompt the user ~once a month.
-		if (cfg.lastDatePrompted && daysBetween(new Date(), cfg.lastDatePrompted) < 30) {
-			return cfg;
-		}
-		cfg.lastDatePrompted = new Date();
-		await promptForGoplsOptOutSurvey(
-			goCtx,
-			cfg,
-			"It looks like you've disabled the Go language server. Would you be willing to tell us why you've disabled it, so that we can improve it?"
-		);
-		return cfg;
-	};
-	cfg = await promptFn();
-	flushGoplsOptOutConfig(cfg, workspace);
-}
-
-async function promptForGoplsOptOutSurvey(
-	goCtx: GoExtensionContext,
-	cfg: GoplsOptOutConfig,
-	msg: string
-): Promise<GoplsOptOutConfig> {
-	const s = await vscode.window.showInformationMessage(msg, { title: 'Yes' }, { title: 'No' });
-	if (!s) {
-		return cfg;
-	}
-	const localGoplsVersion = await getLocalGoplsVersion(goCtx.latestConfig);
-	const goplsVersion = localGoplsVersion?.version || 'na';
-	const goV = await getGoVersion();
-	let goVersion = 'na';
-	if (goV) {
-		goVersion = goV.format(true);
-	}
-	switch (s.title) {
-		case 'Yes':
-			cfg.prompt = false;
-			await vscode.env.openExternal(
-				vscode.Uri.parse(
-					`https://google.qualtrics.com/jfe/form/SV_doId0RNgV3pHovc?gopls=${goplsVersion}&go=${goVersion}&os=${process.platform}`
-				)
-			);
-			break;
-		case 'No':
-			break;
-	}
-	return cfg;
 }
 
 export interface GoplsOptOutConfig {
