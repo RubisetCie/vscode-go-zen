@@ -1925,7 +1925,7 @@ export class GoDebugSession extends LoggingDebugSession {
 			},
 			(err) => {
 				// No need to repeatedly show the error pop-up when expressions
-				// are continiously reevaluated in the Watch panel, which
+				// are continuously reevaluated in the Watch panel, which
 				// already displays errors.
 				this.sendErrorResponse(
 					response,
@@ -2678,7 +2678,7 @@ export class GoDebugSession extends LoggingDebugSession {
 		if (errorMessage === 'bad access') {
 			// Reuse the panic message from the Go runtime.
 			errorMessage =
-				'runtime error: invalid memory address or nil pointer dereference [signal SIGSEGV: segmentation violation]\nUnable to propogate EXC_BAD_ACCESS signal to target process and panic (see https://github.com/go-delve/delve/issues/852)';
+				'runtime error: invalid memory address or nil pointer dereference [signal SIGSEGV: segmentation violation]\nUnable to propagate EXC_BAD_ACCESS signal to target process and panic (see https://github.com/go-delve/delve/issues/852)';
 		}
 
 		logError(message + ' - ' + errorMessage);
