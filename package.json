@@ -1,7 +1,7 @@
 {
   "name": "go",
   "displayName": "Go",
-  "version": "0.35.2",
+  "version": "0.37.0",
   "publisher": "golang",
   "description": "Rich Go language support for Visual Studio Code",
   "author": {
@@ -48,6 +48,7 @@
   },
   "extensionDependencies": [],
   "dependencies": {
+    "@vscode/codicons": "0.0.32",
     "diff": "4.0.2",
     "glob": "7.1.7",
     "json-rpc2": "2.0.0",
@@ -77,7 +78,7 @@
     "fs-extra": "9.1.0",
     "get-port": "5.1.1",
     "gts": "4.0.0",
-    "mocha": "9.2.0",
+    "mocha": "9.2.2",
     "prettier": "2.2.1",
     "sinon": "9.2.4",
     "ts-loader": "7.0.5",
@@ -170,6 +171,12 @@
         "aliases": [
           "Go Template File"
         ]
+      },
+      {
+        "id": "govulncheck",
+        "aliases": [
+          "Govulncheck Output"
+        ]
       }
     ],
     "grammars": [
@@ -187,6 +194,11 @@
         "language": "go.sum",
         "scopeName": "go.sum",
         "path": "./syntaxes/go.sum.tmGrammar.json"
+      },
+      {
+        "language": "govulncheck",
+        "scopeName": "govulncheck",
+        "path": "./syntaxes/govulncheck.tmGrammar.json"
       }
     ],
     "snippets": [
@@ -237,6 +249,11 @@
         "description": "Runs a sub test at the cursor."
       },
       {
+        "command": "go.debug.subtest.cursor",
+        "title": "Go: Debug Subtest At Cursor",
+        "description": "Debug a sub test at the cursor."
+      },
+      {
         "command": "go.benchmark.cursor",
         "title": "Go: Benchmark Function At Cursor",
         "description": "Runs a benchmark at the cursor."
@@ -281,6 +298,11 @@
         "shortTitle": "Delete",
         "description": "Delete selected profile",
         "category": "Test"
+      },
+      {
+        "command": "go.test.showProfileFile",
+        "title": "Go: Show pprof file",
+        "description": "Internal use. Open a pprof profile file."
       },
       {
         "command": "go.benchmark.package",
@@ -366,6 +388,11 @@
         "command": "go.toggle.test.file",
         "title": "Go: Toggle Test File",
         "description": "Toggles between file in current active editor and the corresponding test file."
+      },
+      {
+        "command": "go.vulncheck.toggle",
+        "title": "Go: Toggle Vulncheck",
+        "description": "Toggle the display of vulnerability analysis in dependencies."
       },
       {
         "command": "go.add.tags",
@@ -509,12 +536,6 @@
         "description": "Reset the Go Env for the active workspace.",
         "icon": "$(settings-remove)",
         "enablement": "workspaceFolderCount > 0"
-      },
-      {
-        "command": "go.vulncheck.run",
-        "title": "Go: Run Vulncheck (Experimental)",
-        "description": "Run go vulncheck.",
-        "enablement": "go.goplsIsRunning"
       }
     ],
     "breakpoints": [
@@ -1189,23 +1210,23 @@
         "go.formatTool": {
           "type": "string",
           "default": "default",
-          "description": "When the language server is enabled and one of default/gofmt/goimports/gofumpt is chosen, the language server will handle formatting. Otherwise, the extension will use the specified tool for formatting.",
+          "markdownDescription": "When the language server is enabled and one of `default`/`gofmt`/`goimports`/`gofumpt` is chosen, the language server will handle formatting. If `custom` tool is selected, the extension will use the `customFormatter` tool in the `#go.alternateTools#` section.",
           "scope": "resource",
           "enum": [
             "default",
             "gofmt",
             "goimports",
             "goformat",
-            "gofumpt"
+            "gofumpt",
+            "custom"
           ],
-          "additionalItems": true,
-          "enumDescriptions": [
+          "markdownEnumDescriptions": [
             "If the language server is enabled, format via the language server, which already supports gofmt, goimports, goreturns, and gofumpt. Otherwise, goimports.",
             "Formats the file according to the standard Go style. (not applicable when the language server is enabled)",
             "Organizes imports and formats the file with gofmt. (not applicable when the language server is enabled)",
             "Configurable gofmt, see https://github.com/mbenkmann/goformat.",
-            "Stricter version of gofmt, see https://github.com/mvdan/gofumpt. (not applicable when the language server is enabled)",
-            "Applies gofumpt formatting and organizes imports."
+            "Stricter version of gofmt, see https://github.com/mvdan/gofumpt. . Use `#gopls.format.gofumpt#` instead)",
+            "Formats using the custom tool specified as `customFormatter` in the `#go.alternateTools#` setting. The tool should take the input as STDIN and output the formatted code as STDOUT."
           ]
         },
         "go.formatFlags": {
@@ -1627,11 +1648,6 @@
         "go.enableCodeLens": {
           "type": "object",
           "properties": {
-            "references": {
-              "type": "boolean",
-              "default": false,
-              "description": "If true, enables the references code lens. Uses guru. Recalculates when there is change to the document followed by scrolling. Unnecessary when using the language server; use the call graph feature instead."
-            },
             "runtest": {
               "type": "boolean",
               "default": true,
@@ -1640,7 +1656,6 @@
           },
           "additionalProperties": false,
           "default": {
-            "references": false,
             "runtest": true
           },
           "description": "Feature level setting to enable/disable code lens for references and run/debug tests",
@@ -2020,15 +2035,15 @@
               "default": "gopls",
               "description": "Alternate tool to use instead of the gopls binary or alternate path to use for the gopls binary."
             },
-            "go-outline": {
-              "type": "string",
-              "default": "go-outline",
-              "description": "Alternate tool to use instead of the go-outline binary or alternate path to use for the go-outline binary."
-            },
             "dlv": {
               "type": "string",
               "default": "dlv",
               "description": "Alternate tool to use instead of the dlv binary or alternate path to use for the dlv binary."
+            },
+            "customFormatter": {
+              "type": "string",
+              "default": "",
+              "markdownDescription": "Custom formatter to use instead of the language server. This should be used with the `custom` option in `#go.formatTool#`."
             }
           },
           "additionalProperties": true
@@ -2064,9 +2079,9 @@
             },
             "build.directoryFilters": {
               "type": "array",
-              "markdownDescription": "directoryFilters can be used to exclude unwanted directories from the\nworkspace. By default, all directories are included. Filters are an\noperator, `+` to include and `-` to exclude, followed by a path prefix\nrelative to the workspace folder. They are evaluated in order, and\nthe last filter that applies to a path controls whether it is included.\nThe path prefix can be empty, so an initial `-` excludes everything.\n\nExamples:\n\nExclude node_modules: `-node_modules`\n\nInclude only project_a: `-` (exclude everything), `+project_a`\n\nInclude only project_a, but not node_modules inside it: `-`, `+project_a`, `-project_a/node_modules`\n",
+              "markdownDescription": "directoryFilters can be used to exclude unwanted directories from the\nworkspace. By default, all directories are included. Filters are an\noperator, `+` to include and `-` to exclude, followed by a path prefix\nrelative to the workspace folder. They are evaluated in order, and\nthe last filter that applies to a path controls whether it is included.\nThe path prefix can be empty, so an initial `-` excludes everything.\n\nDirectoryFilters also supports the `**` operator to match 0 or more directories.\n\nExamples:\n\nExclude node_modules at current depth: `-node_modules`\n\nExclude node_modules at any depth: `-**/node_modules`\n\nInclude only project_a: `-` (exclude everything), `+project_a`\n\nInclude only project_a, but not node_modules inside it: `-`, `+project_a`, `-project_a/node_modules`\n",
               "default": [
-                "-node_modules"
+                "-**/node_modules"
               ],
               "scope": "resource"
             },
@@ -2087,15 +2102,9 @@
               "default": true,
               "scope": "resource"
             },
-            "build.experimentalUseInvalidMetadata": {
-              "type": "boolean",
-              "markdownDescription": "(Experimental) experimentalUseInvalidMetadata enables gopls to fall back on outdated\npackage metadata to provide editor features if the go command fails to\nload packages for some reason (like an invalid go.mod file). This will\neventually be the default behavior, and this setting will be removed.\n",
-              "default": false,
-              "scope": "resource"
-            },
             "build.experimentalWorkspaceModule": {
               "type": "boolean",
-              "markdownDescription": "(Experimental) experimentalWorkspaceModule opts a user into the experimental support\nfor multi-module workspaces.\n",
+              "markdownDescription": "(Experimental) experimentalWorkspaceModule opts a user into the experimental support\nfor multi-module workspaces.\n\nDeprecated: this feature is deprecated and will be removed in a future\nversion of gopls (https://go.dev/issue/55331).\n",
               "default": false,
               "scope": "resource"
             },
@@ -2111,6 +2120,14 @@
                 ""
               ],
               "default": "Normal",
+              "scope": "resource"
+            },
+            "build.standaloneTags": {
+              "type": "array",
+              "markdownDescription": "standaloneTags specifies a set of build constraints that identify\nindividual Go source files that make up the entire main package of an\nexecutable.\n\nA common example of standalone main files is the convention of using the\ndirective `//go:build ignore` to denote files that are not intended to be\nincluded in any package, for example because they are invoked directly by\nthe developer using `go run`.\n\nGopls considers a file to be a standalone main file if and only if it has\npackage name \"main\" and has a build directive of the exact form\n\"//go:build tag\" or \"// +build tag\", where tag is among the list of tags\nconfigured by this setting. Notably, if the build constraint is more\ncomplicated than a simple tag (such as the composite constraint\n`//go:build tag && go1.18`), the file is not considered to be a standalone\nmain file.\n\nThis setting is only supported when gopls is built with Go 1.16 or later.\n",
+              "default": [
+                "ignore"
+              ],
               "scope": "resource"
             },
             "build.templateExtensions": {
@@ -2151,7 +2168,7 @@
                   "markdownDescription": "Regenerates cgo definitions.",
                   "default": true
                 },
-                "run_vulncheck_exp": {
+                "run_govulncheck": {
                   "type": "boolean",
                   "markdownDescription": "Run vulnerability check (`govulncheck`).",
                   "default": false
@@ -2214,7 +2231,7 @@
             },
             "ui.diagnostic.analyses": {
               "type": "object",
-              "markdownDescription": "analyses specify analyses that the user would like to enable or disable.\nA map of the names of analysis passes that should be enabled/disabled.\nA full list of analyzers that gopls uses can be found\n[here](https://github.com/golang/tools/blob/master/gopls/doc/analyzers.md).\n\nExample Usage:\n\n```json5\n...\n\"analyses\": {\n  \"unreachable\": false, // Disable the unreachable analyzer.\n  \"unusedparams\": true  // Enable the unusedparams analyzer.\n}\n...\n```\n",
+              "markdownDescription": "analyses specify analyses that the user would like to enable or disable.\nA map of the names of analysis passes that should be enabled/disabled.\nA full list of analyzers that gopls uses can be found in\n[analyzers.md](https://github.com/golang/tools/blob/master/gopls/doc/analyzers.md).\n\nExample Usage:\n\n```json5\n...\n\"analyses\": {\n  \"unreachable\": false, // Disable the unreachable analyzer.\n  \"unusedparams\": true  // Enable the unusedparams analyzer.\n}\n...\n```\n",
               "scope": "resource",
               "properties": {
                 "asmdecl": {
@@ -2309,7 +2326,7 @@
                 },
                 "loopclosure": {
                   "type": "boolean",
-                  "markdownDescription": "check references to loop variables from within nested functions\n\nThis analyzer checks for references to loop variables from within a\nfunction literal inside the loop body. It checks only instances where\nthe function literal is called in a defer or go statement that is the\nlast statement in the loop body, as otherwise we would need whole\nprogram analysis.\n\nFor example:\n\n\tfor i, v := range s {\n\t\tgo func() {\n\t\t\tprintln(i, v) // not what you might expect\n\t\t}()\n\t}\n\nSee: https://golang.org/doc/go_faq.html#closures_and_goroutines",
+                  "markdownDescription": "check references to loop variables from within nested functions\n\nThis analyzer reports places where a function literal references the\niteration variable of an enclosing loop, and the loop calls the function\nin such a way (e.g. with go or defer) that it may outlive the loop\niteration and possibly observe the wrong value of the variable.\n\nIn this example, all the deferred functions run after the loop has\ncompleted, so all observe the final value of v.\n\n    for _, v := range list {\n        defer func() {\n            use(v) // incorrect\n        }()\n    }\n\nOne fix is to create a new variable for each iteration of the loop:\n\n    for _, v := range list {\n        v := v // new var per iteration\n        defer func() {\n            use(v) // ok\n        }()\n    }\n\nThe next example uses a go statement and has a similar problem.\nIn addition, it has a data race because the loop updates v\nconcurrent with the goroutines accessing it.\n\n    for _, v := range elem {\n        go func() {\n            use(v)  // incorrect, and a data race\n        }()\n    }\n\nA fix is the same as before. The checker also reports problems\nin goroutines started by golang.org/x/sync/errgroup.Group.\nA hard-to-spot variant of this form is common in parallel tests:\n\n    func Test(t *testing.T) {\n        for _, test := range tests {\n            t.Run(test.name, func(t *testing.T) {\n                t.Parallel()\n                use(test) // incorrect, and a data race\n            })\n        }\n    }\n\nThe t.Parallel() call causes the rest of the function to execute\nconcurrent with the loop.\n\nThe analyzer reports references only in the last statement,\nas it is not deep enough to understand the effects of subsequent\nstatements that might render the reference benign.\n(\"Last statement\" is defined recursively in compound\nstatements such as if, switch, and select.)\n\nSee: https://golang.org/doc/go_faq.html#closures_and_goroutines",
                   "default": true
                 },
                 "lostcancel": {
@@ -2489,13 +2506,13 @@
             },
             "ui.diagnostic.experimentalWatchedFileDelay": {
               "type": "string",
-              "markdownDescription": "(Experimental) experimentalWatchedFileDelay controls the amount of time that gopls waits\nfor additional workspace/didChangeWatchedFiles notifications to arrive,\nbefore processing all such notifications in a single batch. This is\nintended for use by LSP clients that don't support their own batching of\nfile system notifications.\n\nThis option must be set to a valid duration string, for example `\"100ms\"`.\n",
+              "markdownDescription": "(Experimental) experimentalWatchedFileDelay controls the amount of time that gopls waits\nfor additional workspace/didChangeWatchedFiles notifications to arrive,\nbefore processing all such notifications in a single batch. This is\nintended for use by LSP clients that don't support their own batching of\nfile system notifications.\n\nThis option must be set to a valid duration string, for example `\"100ms\"`.\n\nDeprecated: this setting is deprecated and will be removed in a future\nversion of gopls (https://go.dev/issue/55332)\n",
               "default": "0s",
               "scope": "resource"
             },
             "ui.diagnostic.staticcheck": {
               "type": "boolean",
-              "markdownDescription": "(Experimental) staticcheck enables additional analyses from staticcheck.io.\n",
+              "markdownDescription": "(Experimental) staticcheck enables additional analyses from staticcheck.io.\nThese analyses are documented on\n[Staticcheck's website](https://staticcheck.io/docs/checks/).\n",
               "default": false,
               "scope": "resource"
             },
@@ -2607,6 +2624,20 @@
             }
           }
         },
+        "go.diagnostic.vulncheck": {
+          "type": "string",
+          "markdownDescription": "(Experimental) vulncheck enables vulnerability scanning.\n",
+          "enum": [
+            "Imports",
+            "Off"
+          ],
+          "markdownEnumDescriptions": [
+            "`\"Imports\"`: In Imports mode, `gopls` will report vulnerabilities that affect packages\ndirectly and indirectly used by the analyzed main module.\n",
+            "`\"Off\"`: Disable vulnerability analysis.\n"
+          ],
+          "default": "Off",
+          "scope": "resource"
+        },
         "go.inlayHints.assignVariableTypes": {
           "type": "boolean",
           "markdownDescription": "Enable/disable inlay hints for variable types in assign statements:\n```go\n\ti/* int*/, j/* int*/ := 0, len(r)-1\n```",
@@ -2660,6 +2691,10 @@
         },
         {
           "command": "go.test.deleteProfile",
+          "when": "false"
+        },
+        {
+          "command": "go.test.showProfileFile",
           "when": "false"
         },
         {
@@ -2816,17 +2851,6 @@
           "when": "go.hasProfiles"
         }
       ]
-    },
-    "customEditors": [
-      {
-        "viewType": "vulncheck.view",
-        "displayName": "Vulnerability Report",
-        "selector": [
-          {
-            "filenamePattern": "*.vulncheck.json"
-          }
-        ]
-      }
-    ]
+    }
   }
 }

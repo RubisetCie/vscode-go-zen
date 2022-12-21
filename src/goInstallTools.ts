@@ -79,7 +79,7 @@ export async function installAllTools(updateExistingToolsOnly = false) {
 	const selected = await vscode.window.showQuickPick(
 		allTools.map((x) => {
 			const item: vscode.QuickPickItem = {
-				label: x.name,
+				label: `${x.name}@${x.defaultVersion || 'latest'}`,
 				description: x.description
 			};
 			return item;
@@ -256,12 +256,8 @@ async function installToolWithGo(
 		importPath = getImportPath(tool, goVersion);
 	} else {
 		let version: semver.SemVer | string | undefined | null = tool.version;
-		if (!version) {
-			if (tool.usePrereleaseInPreviewMode && extensionInfo.isPreview) {
-				version = await latestToolVersion(tool, true);
-			} else if (tool.defaultVersion) {
-				version = tool.defaultVersion;
-			}
+		if (!version && tool.usePrereleaseInPreviewMode && extensionInfo.isPreview) {
+			version = await latestToolVersion(tool, true);
 		}
 		importPath = getImportPathWithVersion(tool, version, goVersion);
 	}
@@ -379,6 +375,12 @@ export function declinedToolInstall(toolName: string) {
 
 export async function promptForMissingTool(toolName: string) {
 	const tool = getTool(toolName);
+	if (!tool) {
+		vscode.window.showWarningMessage(
+			`${toolName} is not found. Please make sure it is installed and available in the PATH ${envPath}`
+		);
+		return;
+	}
 
 	// If the automatic declining is enabled, don't prompt for it.
 	if (getDeclineAllToolsInstallConfig(getGoConfig())) {
@@ -427,7 +429,7 @@ export async function promptForMissingTool(toolName: string) {
 	}
 	const cmd = goVersion.lt('1.16')
 		? `go get -v ${getImportPath(tool, goVersion)}`
-		: `go install -v ${getImportPathWithVersion(tool, tool.defaultVersion, goVersion)}`;
+		: `go install -v ${getImportPathWithVersion(tool, undefined, goVersion)}`;
 	const selected = await vscode.window.showErrorMessage(
 		`The "${tool.name}" command is not available. Run "${cmd}" to install.`,
 		...installOptions
@@ -454,6 +456,9 @@ export async function promptForUpdatingTool(
 	message?: string
 ) {
 	const tool = getTool(toolName);
+	if (!tool) {
+		return; // not a tool known to us.
+	}
 	const toolVersion = { ...tool, version: newVersion }; // ToolWithVersion
 
 	// If the automatic declining is enabled, don't prompt for it.
@@ -752,9 +757,9 @@ async function defaultInspectGoToolVersion(
 			dep     github.com/BurntSushi/toml      v0.3.1  h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ=
 
 		   if the binary was built with a dev version of go, in module mode.
-		    /Users/hakim/go/bin/gopls: devel go1.18-41f485b9a7 Mon Jan 31 13:43:52 2022 +0000
+			/Users/hakim/go/bin/gopls: devel go1.18-41f485b9a7 Mon Jan 31 13:43:52 2022 +0000
 			path    golang.org/x/tools/gopls
-            mod     golang.org/x/tools/gopls        v0.8.0-pre.1    h1:6iHi9bCJ8XndQtBEFFG/DX+eTJrf2lKFv4GI3zLeDOo=
+			mod     golang.org/x/tools/gopls        v0.8.0-pre.1    h1:6iHi9bCJ8XndQtBEFFG/DX+eTJrf2lKFv4GI3zLeDOo=
 			...
 		*/
 		const lines = stdout.split('\n', 3);
