@@ -27,14 +27,28 @@ jobs:
           npm ci
           npm run vscode:prepublish
 
-      - name: Package
-        uses: lannonbr/vsce-action@0f3391ee0477b08fae949eb0a875e91e6d20b075
-        with:
-          args: "package"
+      - name: Package extension
+        run: npx vsce package -o "./go-${{ env.EXT_VERSION }}.vsix"
 
       - name: Upload
         uses: actions/upload-artifact@v3
         with:
-          name: go-${{ github.event.inputs.release_version }}-zen.vsix
-          path: ./go-${{ github.event.inputs.release_version }}.vsix
-          if-no-files-found: error
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ env.EXT_VERSION }}
+          draft: false
+          prerelease: ${{env.EXT_ISPREVIEW == 1}}
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./go-${{ env.EXT_VERSION }}.vsix
+          asset_name: go-${{ env.EXT_VERSION }}.vsix
+          asset_content_type: application/zip
+
+      - name: Publish
+        if: env.EXT_ISPREVIEW != 1 && github.repository == 'golang/vscode-go'
+        run: npx vsce publish -i "./go-${{ env.EXT_VERSION }}.vsix" -p "${{ secrets.VSCE_TOKEN }}"
+
