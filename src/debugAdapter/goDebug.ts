@@ -39,7 +39,7 @@ import { DebugProtocol } from 'vscode-debugprotocol';
 import { parseEnvFiles } from '../utils/envUtils';
 import {
 	correctBinname,
-	envPath,
+	getEnvPath,
 	expandFilePathInOutput,
 	fixDriveCasingInWindows,
 	getBinPathWithPreferredGopathGoroot,
@@ -609,7 +609,7 @@ export class Delve {
 					log(
 						`Couldn't find dlv at the Go tools path, ${process.env['GOPATH']}${
 							env['GOPATH'] ? ', ' + env['GOPATH'] : ''
-						} or ${envPath}`
+						} or ${getEnvPath()}`
 					);
 					return reject(
 						'Cannot find Delve debugger. Install from https://github.com/go-delve/delve & ensure it is in your Go tools path, "GOPATH/bin" or "PATH".'
@@ -2344,7 +2344,12 @@ export class GoDebugSession extends LoggingDebugSession {
 				variablesReference: 0
 			};
 		} else if (v.kind === GoReflectKind.Ptr) {
-			if (v.children[0].addr === 0) {
+			if (!v.children[0]) {
+				return {
+					result: 'unknown <' + v.type + '>',
+					variablesReference: 0
+				};
+			} else if (v.children[0].addr === 0) {
 				return {
 					result: 'nil <' + v.type + '>',
 					variablesReference: 0

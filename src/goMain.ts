@@ -39,9 +39,8 @@ import { setLogConfig } from './goLogging';
 import { GO_MODE } from './goMode';
 import { GO111MODULE, goModInit, isModSupported } from './goModules';
 import { playgroundCommand } from './goPlayground';
-import { GoReferencesCodeLensProvider } from './goReferencesCodelens';
 import { GoRunTestCodeLensProvider } from './goRunTestCodelens';
-import { disposeGoStatusBar, expandGoStatusBar, updateGoStatusBar } from './goStatus';
+import { disposeGoStatusBar, expandGoStatusBar, outputChannel, updateGoStatusBar } from './goStatus';
 
 import { vetCode } from './goVet';
 import {
@@ -66,6 +65,7 @@ import { GoExplorerProvider } from './goExplorer';
 import { GoExtensionContext } from './context';
 import * as commands from './commands';
 import { toggleVulncheckCommandFactory, VulncheckOutputLinkProvider } from './goVulncheck';
+import { GoTaskProvider } from './goTaskProvider';
 
 const goCtx: GoExtensionContext = {};
 
@@ -120,7 +120,6 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 	registerCommand('go.environment.status', expandGoStatusBar);
 
 	GoRunTestCodeLensProvider.activate(ctx, goCtx);
-	GoReferencesCodeLensProvider.activate(ctx, goCtx);
 	GoDebugConfigurationProvider.activate(ctx, goCtx);
 	GoDebugFactory.activate(ctx);
 
@@ -204,6 +203,8 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 	vscode.languages.setLanguageConfiguration(GO_MODE.language, {
 		wordPattern: /(-?\d*\.\d\w*)|([^`~!@#%^&*()\-=+[{\]}\\|;:'",.<>/?\s]+)/g
 	});
+
+	GoTaskProvider.setup(ctx, vscode.workspace);
 
 	// Vulncheck output link provider.
 	VulncheckOutputLinkProvider.activate(ctx);
@@ -369,62 +370,20 @@ function lintDiagnosticCollectionName(lintToolName: string) {
 
 async function showDeprecationWarning() {
 	const cfg = getGoConfig();
-	const experimentalFeatures = cfg['languageServerExperimentalFeatures'];
-	if (experimentalFeatures) {
-		// TODO(golang/vscode-go#50): Eventually notify about deprecation of
-		// all of the settings. See golang/vscode-go#1109 too.
-		// The `diagnostics` setting is still used as a workaround for running custom vet.
-		const promptKey = 'promptedLanguageServerExperimentalFeatureDeprecation';
-		const prompted = getFromGlobalState(promptKey, false);
-		if (!prompted && experimentalFeatures['diagnostics'] === false) {
-			const msg = `The 'go.languageServerExperimentalFeature.diagnostics' setting will be deprecated soon.
-	If you would like additional configuration for diagnostics from gopls, please see and response to [Issue 50](https://go.dev/s/vscode-issue/50).`;
-			const selected = await vscode.window.showInformationMessage(msg, "Don't show again");
-			switch (selected) {
-				case "Don't show again":
-					updateGlobalState(promptKey, true);
-			}
-		}
-	}
-	const codelensFeatures = cfg['enableCodeLens'];
-	if (codelensFeatures && codelensFeatures['references']) {
-		const promptKey = 'promptedCodeLensReferencesFeatureDeprecation';
+	const disableLanguageServer = cfg['useLanguageServer'];
+	if (disableLanguageServer === false) {
+		const promptKey = 'promptedLegacyLanguageServerDeprecation';
 		const prompted = getFromGlobalState(promptKey, false);
 		if (!prompted) {
 			const msg =
-				"The 'go.enableCodeLens.references' setting will be removed soon. Please see [Issue 2509](https://go.dev/s/vscode-issue/2509).";
-			const selected = await vscode.window.showWarningMessage(msg, 'Update Settings', "Don't show again");
+				'When [go.useLanguageServer](command:workbench.action.openSettings?%5B%22go.useLanguageServer%22%5D) is false, IntelliSense, code navigation, and refactoring features for Go will stop working. Linting, debugging and testing other than debug/test code lenses will continue to work. Please see [Issue 2799](https://go.dev/s/vscode-issue/2799).';
+			const selected = await vscode.window.showInformationMessage(msg, 'Open settings', "Don't show again");
 			switch (selected) {
-				case 'Update Settings':
-					{
-						const { globalValue, workspaceValue, workspaceFolderValue } = cfg.inspect<{
-							[key: string]: boolean;
-						}>('enableCodeLens') || {
-							globalValue: undefined,
-							workspaceValue: undefined,
-							workspaceFolderValue: undefined
-						};
-						if (globalValue && globalValue['references']) {
-							delete globalValue.references;
-							cfg.update('enableCodeLens', globalValue, vscode.ConfigurationTarget.Global);
-						}
-						if (workspaceValue && workspaceValue['references']) {
-							delete workspaceValue.references;
-							cfg.update('enableCodeLens', workspaceValue, vscode.ConfigurationTarget.Workspace);
-						}
-						if (workspaceFolderValue && workspaceFolderValue['references']) {
-							delete workspaceFolderValue.references;
-							cfg.update(
-								'enableCodeLens',
-								workspaceFolderValue,
-								vscode.ConfigurationTarget.WorkspaceFolder
-							);
-						}
-					}
+				case 'Open settings':
+					vscode.commands.executeCommand('workbench.action.openSettings', 'go.useLanguageServer');
 					break;
 				case "Don't show again":
 					updateGlobalState(promptKey, true);
-					break;
 			}
 		}
 	}
