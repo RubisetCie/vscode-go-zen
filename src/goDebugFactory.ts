@@ -15,7 +15,7 @@ import * as net from 'net';
 import { Logger, logVerbose, TimestampedLogger } from './goLogging';
 import { DebugProtocol } from 'vscode-debugprotocol';
 import { getWorkspaceFolderPath } from './util';
-import { envPath, getBinPathFromEnvVar } from './utils/pathUtils';
+import { getEnvPath, getBinPathFromEnvVar } from './utils/pathUtils';
 
 export function activate(ctx: vscode.ExtensionContext) {
 	const debugOutputChannel = vscode.window.createOutputChannel('Go Debug');
@@ -460,7 +460,7 @@ export class DelveDAPOutputAdapter extends ProxyDebugAdapter {
 let sudoPath: string | null | undefined = undefined;
 function getSudo(): string | null {
 	if (sudoPath === undefined) {
-		sudoPath = getBinPathFromEnvVar('sudo', envPath, false);
+		sudoPath = getBinPathFromEnvVar('sudo', getEnvPath(), false);
 	}
 	return sudoPath;
 }
@@ -625,7 +625,7 @@ function getSpawnConfig(launchAttachArgs: vscode.DebugConfiguration, logErr: (ms
 	const dlvPath = launchAttachArgs.dlvToolPath ?? 'dlv';
 
 	if (!fs.existsSync(dlvPath)) {
-		const envPath = process.env['PATH'] || (process.platform === 'win32' ? process.env['Path'] : null);
+		const envPath = getEnvPath();
 		logErr(
 			`Couldn't find ${dlvPath} at the Go tools path, ${process.env['GOPATH']}${
 				env['GOPATH'] ? ', ' + env['GOPATH'] : ''
@@ -643,13 +643,8 @@ function getSpawnConfig(launchAttachArgs: vscode.DebugConfiguration, logErr: (ms
 	const dlvArgs = new Array<string>();
 	dlvArgs.push('dap');
 
-	// TODO(hyangah): if Go version is higher than what the delve can support, we need to warn users.
-
 	// When duplicate flags are specified,
 	// dlv doesn't mind but accepts the last flag value.
-	// Add user-specified dlv flags first except
-	//  --check-go-version that we want to disable by default but allow users to override.
-	dlvArgs.push('--check-go-version=false');
 	if (launchAttachArgs.dlvFlags && launchAttachArgs.dlvFlags.length > 0) {
 		dlvArgs.push(...launchAttachArgs.dlvFlags);
 	}

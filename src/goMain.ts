@@ -39,9 +39,8 @@ import { setLogConfig } from './goLogging';
 import { GO_MODE } from './goMode';
 import { GO111MODULE, goModInit, isModSupported } from './goModules';
 import { playgroundCommand } from './goPlayground';
-import { GoReferencesCodeLensProvider } from './goReferencesCodelens';
 import { GoRunTestCodeLensProvider } from './goRunTestCodelens';
-import { disposeGoStatusBar, expandGoStatusBar, updateGoStatusBar } from './goStatus';
+import { disposeGoStatusBar, expandGoStatusBar, outputChannel, updateGoStatusBar } from './goStatus';
 
 import { vetCode } from './goVet';
 import {
@@ -58,16 +57,15 @@ import { clearCacheForTools } from './utils/pathUtils';
 import { WelcomePanel } from './welcome';
 import vscode = require('vscode');
 import { getFormatTool } from './language/legacy/goFormat';
-import { resetSurveyConfigs, showSurveyConfig } from './goSurvey';
 import { ExtensionAPI } from './export';
 import extensionAPI from './extensionAPI';
 import { GoTestExplorer, isVscodeTestingAPIAvailable } from './goTest/explore';
 import { killRunningPprof } from './goTest/profile';
 import { GoExplorerProvider } from './goExplorer';
-import { VulncheckProvider, VulncheckResultViewProvider } from './goVulncheck';
-
 import { GoExtensionContext } from './context';
 import * as commands from './commands';
+import { toggleVulncheckCommandFactory, VulncheckOutputLinkProvider } from './goVulncheck';
+import { GoTaskProvider } from './goTaskProvider';
 
 const goCtx: GoExtensionContext = {};
 
@@ -104,6 +102,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 
 	const registerCommand = commands.createRegisterCommand(ctx, goCtx);
 	registerCommand('go.languageserver.restart', commands.startLanguageServer);
+	registerCommand('go.languageserver.maintain', commands.startGoplsMaintainerInterface);
 
 	await commands.startLanguageServer(ctx, goCtx)(RestartReason.ACTIVATION);
 
@@ -122,7 +121,6 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 	registerCommand('go.environment.status', expandGoStatusBar);
 
 	GoRunTestCodeLensProvider.activate(ctx, goCtx);
-	GoReferencesCodeLensProvider.activate(ctx, goCtx);
 	GoDebugConfigurationProvider.activate(ctx, goCtx);
 	GoDebugFactory.activate(ctx);
 
@@ -146,8 +144,9 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 	registerCommand('go.godoctor.var', commands.extractVariable);
 	registerCommand('go.test.cursor', commands.testAtCursor('test'));
 	registerCommand('go.test.cursorOrPrevious', commands.testAtCursorOrPrevious('test'));
-	registerCommand('go.subtest.cursor', commands.subTestAtCursor);
+	registerCommand('go.subtest.cursor', commands.subTestAtCursor('test'));
 	registerCommand('go.debug.cursor', commands.testAtCursor('debug'));
+	registerCommand('go.debug.subtest.cursor', commands.subTestAtCursor('debug'));
 	registerCommand('go.benchmark.cursor', commands.testAtCursor('benchmark'));
 	registerCommand('go.test.package', commands.testCurrentPackage(false));
 	registerCommand('go.benchmark.package', commands.testCurrentPackage(true));
@@ -170,8 +169,6 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 	}
 
 	GoExplorerProvider.setup(ctx);
-	VulncheckProvider.setup(ctx, goCtx);
-	VulncheckResultViewProvider.register(ctx, goCtx);
 
 	registerCommand('go.test.generate.package', goGenerateTests.generateTestCurrentPackage);
 	registerCommand('go.test.generate.file', goGenerateTests.generateTestCurrentFile);
@@ -199,10 +196,6 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 	// Go Environment switching commands
 	registerCommand('go.environment.choose', chooseGoEnvironment);
 
-	// Survey related commands
-	registerCommand('go.survey.showConfig', showSurveyConfig);
-	registerCommand('go.survey.resetConfig', resetSurveyConfigs);
-
 	addOnDidChangeConfigListeners(ctx);
 	addOnChangeTextDocumentListeners(ctx);
 	addOnChangeActiveTextEditorListeners(ctx);
@@ -211,6 +204,12 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 	vscode.languages.setLanguageConfiguration(GO_MODE.language, {
 		wordPattern: /(-?\d*\.\d\w*)|([^`~!@#%^&*()\-=+[{\]}\\|;:'",.<>/?\s]+)/g
 	});
+
+	GoTaskProvider.setup(ctx, vscode.workspace);
+
+	// Vulncheck output link provider.
+	VulncheckOutputLinkProvider.activate(ctx);
+	registerCommand('go.vulncheck.toggle', toggleVulncheckCommandFactory);
 
 	return extensionAPI;
 }
@@ -371,25 +370,19 @@ function lintDiagnosticCollectionName(lintToolName: string) {
 }
 
 async function showDeprecationWarning() {
-	// Present a warning about the deprecation of the go.documentLink setting.
-	const experimentalFeatures = getGoConfig()['languageServerExperimentalFeatures'];
-	if (experimentalFeatures) {
-		// TODO(golang/vscode-go#50): Eventually notify about deprecation of
-		// all of the settings. See golang/vscode-go#1109 too.
-		// The `diagnostics` setting is still used as a workaround for running custom vet.
-		if (experimentalFeatures['documentLink'] === false) {
-			vscode.window
-				.showErrorMessage(`The 'go.languageServerExperimentalFeature.documentLink' setting is now deprecated.
-	Please use '"gopls": {"ui.navigation.importShortcut": "Definition" }' instead.
-	See [the settings doc](https://github.com/golang/vscode-go/blob/master/docs/settings.md#uinavigationimportshortcut) for more details.`);
-		}
-		const promptKey = 'promptedLanguageServerExperimentalFeatureDeprecation';
+	const cfg = getGoConfig();
+	const disableLanguageServer = cfg['useLanguageServer'];
+	if (disableLanguageServer === false) {
+		const promptKey = 'promptedLegacyLanguageServerDeprecation';
 		const prompted = getFromGlobalState(promptKey, false);
-		if (!prompted && experimentalFeatures['diagnostics'] === false) {
-			const msg = `The 'go.languageServerExperimentalFeature.diagnostics' setting will be deprecated soon.
-	If you would like additional configuration for diagnostics from gopls, please see and response to [Issue 50](https://github.com/golang/vscode-go/issues/50).`;
-			const selected = await vscode.window.showInformationMessage(msg, "Don't show again");
+		if (!prompted) {
+			const msg =
+				'When [go.useLanguageServer](command:workbench.action.openSettings?%5B%22go.useLanguageServer%22%5D) is false, IntelliSense, code navigation, and refactoring features for Go will stop working. Linting, debugging and testing other than debug/test code lenses will continue to work. Please see [Issue 2799](https://go.dev/s/vscode-issue/2799).';
+			const selected = await vscode.window.showInformationMessage(msg, 'Open settings', "Don't show again");
 			switch (selected) {
+				case 'Open settings':
+					vscode.commands.executeCommand('workbench.action.openSettings', 'go.useLanguageServer');
+					break;
 				case "Don't show again":
 					updateGlobalState(promptKey, true);
 			}

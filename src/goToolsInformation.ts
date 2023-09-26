@@ -32,7 +32,7 @@ export const allToolsInformation: { [key: string]: Tool } = {
 		replacedByGopls: true,
 		isImportant: true,
 		description: 'Go to symbol in file', // GoDocumentSymbolProvider, used by 'run test' codelens
-		defaultVersion: 'v1.0.0'
+		defaultVersion: 'v0.0.0-20210608161538-9736a4bde949'
 	},
 	'go-symbols': {
 		name: 'go-symbols',
@@ -129,7 +129,7 @@ export const allToolsInformation: { [key: string]: Tool } = {
 		replacedByGopls: true,
 		isImportant: false,
 		description: 'Formatter',
-		defaultVersion: 'v0.4.0'
+		defaultVersion: 'v0.5.0'
 	},
 	'goimports': {
 		name: 'goimports',
@@ -191,8 +191,7 @@ export const allToolsInformation: { [key: string]: Tool } = {
 		modulePath: 'github.com/golangci/golangci-lint',
 		replacedByGopls: false,
 		isImportant: true,
-		description: 'Linter',
-		defaultVersion: 'v1.49.0'
+		description: 'Linter'
 	},
 	'revive': {
 		name: 'revive',
@@ -200,7 +199,7 @@ export const allToolsInformation: { [key: string]: Tool } = {
 		modulePath: 'github.com/mgechev/revive',
 		isImportant: true,
 		description: 'Linter',
-		defaultVersion: 'v1.2.3'
+		defaultVersion: 'v1.3.2'
 	},
 	'gopls': {
 		name: 'gopls',
@@ -211,10 +210,10 @@ export const allToolsInformation: { [key: string]: Tool } = {
 		description: 'Language Server from Google',
 		usePrereleaseInPreviewMode: true,
 		minimumGoVersion: semver.coerce('1.13'),
-		latestVersion: semver.parse('v0.9.5'),
-		latestVersionTimestamp: moment('2022-09-08', 'YYYY-MM-DD'),
-		latestPrereleaseVersion: semver.parse('v0.9.5'),
-		latestPrereleaseVersionTimestamp: moment('2022-09-08', 'YYYY-MM-DD')
+		latestVersion: semver.parse('v0.12.2'),
+		latestVersionTimestamp: moment('2023-06-01', 'YYYY-MM-DD'),
+		latestPrereleaseVersion: semver.parse('v0.12.2'),
+		latestPrereleaseVersionTimestamp: moment('2023-06-01', 'YYYY-MM-DD')
 	},
 	'dlv': {
 		name: 'dlv',

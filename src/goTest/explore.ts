@@ -130,6 +130,12 @@ export class GoTestExplorer {
 		);
 
 		context.subscriptions.push(
+			vscode.commands.registerCommand('go.test.showProfileFile', async (file: Uri) => {
+				return inst.profiler.showFile(file.fsPath);
+			})
+		);
+
+		context.subscriptions.push(
 			workspace.onDidChangeConfiguration(async (x) => {
 				try {
 					await inst.didChangeConfiguration(x);
@@ -252,7 +258,12 @@ export class GoTestExplorer {
 	}
 
 	protected async didCreateFile(file: Uri) {
-		await this.documentUpdate(await this.workspace.openTextDocument(file));
+		// Do not use openTextDocument to get the TextDocument for file,
+		// since this sends a didOpen text document notification to gopls,
+		// leading to spurious diagnostics from gopls:
+		// https://github.com/golang/vscode-go/issues/2570
+		// Instead, get the test item for this file only.
+		await this.resolver.getFile(file);
 	}
 
 	protected async didDeleteFile(file: Uri) {

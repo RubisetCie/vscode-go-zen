@@ -86,10 +86,18 @@ export function getImportPathWithVersion(
 			return importPath + '@' + version;
 		}
 	}
-	// staticcheck requires go1.17+ after v0.3.0.
-	// (golang/vscode-go#2162)
-	if (goVersion.lt('1.17') && tool.name === 'staticcheck') {
-		return importPath + '@v0.2.2';
+	if (tool.name === 'staticcheck') {
+		if (goVersion.lt('1.17')) return importPath + '@v0.2.2';
+		if (goVersion.lt('1.19')) return importPath + '@v0.3.3';
+	}
+	if (tool.name === 'gofumpt') {
+		if (goVersion.lt('1.18')) return importPath + '@v0.2.1';
+	}
+	if (tool.name === 'golangci-lint') {
+		if (goVersion.lt('1.18')) return importPath + '@v1.47.3';
+	}
+	if (tool.defaultVersion) {
+		return importPath + '@' + tool.defaultVersion;
 	}
 	return importPath + '@latest';
 }
@@ -181,9 +189,9 @@ export function getConfiguredTools(
 			break;
 	}
 
-	// Only add format tools if the language server is disabled and the
+	// Only add format tools if the language server is disabled or the
 	// format tool is known to us.
-	if (goConfig['useLanguageServer'] === false && !usingCustomFormatTool(goConfig)) {
+	if (goConfig['useLanguageServer'] === false || usingCustomFormatTool(goConfig)) {
 		maybeAddTool(getFormatTool(goConfig));
 	}
 
@@ -219,8 +227,7 @@ export function goplsStaticcheckEnabled(
 	) {
 		return false;
 	}
-	const features = goConfig['languageServerExperimentalFeatures'];
-	return !features || features['diagnostics'] === true;
+	return true;
 }
 
 export const gocodeClose = async (env: NodeJS.Dict<string>): Promise<string> => {

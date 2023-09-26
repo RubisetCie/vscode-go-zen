@@ -39,7 +39,7 @@ import { DebugProtocol } from 'vscode-debugprotocol';
 import { parseEnvFiles } from '../utils/envUtils';
 import {
 	correctBinname,
-	envPath,
+	getEnvPath,
 	expandFilePathInOutput,
 	fixDriveCasingInWindows,
 	getBinPathWithPreferredGopathGoroot,
@@ -609,7 +609,7 @@ export class Delve {
 					log(
 						`Couldn't find dlv at the Go tools path, ${process.env['GOPATH']}${
 							env['GOPATH'] ? ', ' + env['GOPATH'] : ''
-						} or ${envPath}`
+						} or ${getEnvPath()}`
 					);
 					return reject(
 						'Cannot find Delve debugger. Install from https://github.com/go-delve/delve & ensure it is in your Go tools path, "GOPATH/bin" or "PATH".'
@@ -2344,7 +2344,12 @@ export class GoDebugSession extends LoggingDebugSession {
 				variablesReference: 0
 			};
 		} else if (v.kind === GoReflectKind.Ptr) {
-			if (v.children[0].addr === 0) {
+			if (!v.children[0]) {
+				return {
+					result: 'unknown <' + v.type + '>',
+					variablesReference: 0
+				};
+			} else if (v.children[0].addr === 0) {
 				return {
 					result: 'nil <' + v.type + '>',
 					variablesReference: 0
@@ -2678,7 +2683,7 @@ export class GoDebugSession extends LoggingDebugSession {
 		if (errorMessage === 'bad access') {
 			// Reuse the panic message from the Go runtime.
 			errorMessage =
-				'runtime error: invalid memory address or nil pointer dereference [signal SIGSEGV: segmentation violation]\nUnable to propogate EXC_BAD_ACCESS signal to target process and panic (see https://github.com/go-delve/delve/issues/852)';
+				'runtime error: invalid memory address or nil pointer dereference [signal SIGSEGV: segmentation violation]\nUnable to propagate EXC_BAD_ACCESS signal to target process and panic (see https://github.com/go-delve/delve/issues/852)';
 		}
 
 		logError(message + ' - ' + errorMessage);

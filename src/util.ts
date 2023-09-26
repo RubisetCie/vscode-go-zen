@@ -20,7 +20,7 @@ import { getCurrentPackage } from './goModules';
 import { outputChannel } from './goStatus';
 import { getFromWorkspaceState } from './stateUtils';
 import {
-	envPath,
+	getEnvPath,
 	fixDriveCasingInWindows,
 	getBinPathWithPreferredGopathGorootWithExplanation,
 	getCurrentGoRoot,
@@ -171,6 +171,11 @@ export function getCheckForToolsUpdatesConfig(gocfg: vscode.WorkspaceConfigurati
 		}
 	}
 	return gocfg.get('toolsManagement.checkForUpdates') as string;
+}
+
+// getDeclineAllToolsInstallConfig returns go.toolsManagement.declineAllInstalls configuration.
+export function getDeclineAllToolsInstallConfig(gocfg: vscode.WorkspaceConfiguration) {
+	return gocfg.get('toolsManagement.declineAllInstalls') as boolean;
 }
 
 export function byteOffsetAt(document: vscode.TextDocument, position: vscode.Position): number {
@@ -337,7 +342,7 @@ export async function getGoVersion(goBinPath?: string): Promise<GoVersion> {
 	};
 
 	if (!goRuntimePath) {
-		throw error(`unable to locate "go" binary in GOROOT (${getCurrentGoRoot()}) or PATH (${envPath})`);
+		throw error(`unable to locate "go" binary in GOROOT (${getCurrentGoRoot()}) or PATH (${getEnvPath()})`);
 	}
 	if (cachedGoBinPath === goRuntimePath && cachedGoVersion) {
 		if (cachedGoVersion.isValid()) {
@@ -525,6 +530,16 @@ export function getCurrentGoPath(workspaceUri?: vscode.Uri): string {
 			try {
 				if (fs.statSync(path.join(currentRoot, 'src')).isDirectory()) {
 					inferredGopath = currentRoot;
+				}
+			} catch (e) {
+				// No op
+			}
+		}
+		if (inferredGopath) {
+			// inferred GOPATH must not have go.mod in it.
+			try {
+				if (fs.existsSync(path.join(inferredGopath, 'go.mod'))) {
+					inferredGopath = '';
 				}
 			} catch (e) {
 				// No op
