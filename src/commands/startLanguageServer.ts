@@ -9,18 +9,15 @@ import { CommandFactory } from '.';
 import { getGoConfig } from '../config';
 import { GoExtensionContext } from '../context';
 import { outputChannel, updateLanguageServerIconGoStatusBar } from '../goStatus';
-import { getTool } from '../goTools';
 import {
 	buildLanguageClient,
 	buildLanguageClientOption,
 	buildLanguageServerConfig,
 	errorKind,
-	languageServerUsingDefault,
 	RestartReason,
 	scheduleGoplsSuggestions,
 	stopLanguageClient,
 	suggestGoplsIssueReport,
-	suggestUpdateGopls,
 	toServerInfo,
 	updateRestartHistory
 } from '../language/goLanguageServer';
@@ -32,7 +29,7 @@ const languageServerStartMutex = new Mutex();
 export const startLanguageServer: CommandFactory = (ctx, goCtx) => {
 	return async (reason: RestartReason = RestartReason.MANUAL) => {
 		const goConfig = getGoConfig();
-		const cfg = buildLanguageServerConfig(goConfig);
+		const cfg = await buildLanguageServerConfig(goConfig);
 
 		if (typeof reason === 'string') {
 			updateRestartHistory(goCtx, reason, cfg.enabled);
@@ -44,6 +41,7 @@ export const startLanguageServer: CommandFactory = (ctx, goCtx) => {
 			if (reason === RestartReason.MANUAL) {
 				await suggestGoplsIssueReport(
 					goCtx,
+					cfg,
 					"Looks like you're about to manually restart the language server.",
 					errorKind.manualRestart
 				);
@@ -72,20 +70,8 @@ export const startLanguageServer: CommandFactory = (ctx, goCtx) => {
 				scheduleGoplsSuggestions(goCtx);
 			}
 
-			// If the language server is gopls, we enable a few additional features.
-			if (cfg.serverName === 'gopls') {
-				const tool = getTool(cfg.serverName);
-				if (tool) {
-					// If the language server is turned on because it is enabled by default,
-					// make sure that the user is using a new enough version.
-					if (cfg.enabled && languageServerUsingDefault(goConfig)) {
-						suggestUpdateGopls(tool, cfg);
-					}
-				}
-			}
-
 			if (!cfg.enabled) {
-				const legacyService = new LegacyLanguageService(ctx, goCtx);
+				const legacyService = new LegacyLanguageService();
 				goCtx.legacyLanguageService = legacyService;
 				ctx.subscriptions.push(legacyService);
 				updateStatus(goCtx, goConfig, false);
@@ -95,6 +81,7 @@ export const startLanguageServer: CommandFactory = (ctx, goCtx) => {
 			goCtx.languageClient = await buildLanguageClient(goCtx, buildLanguageClientOption(goCtx, cfg));
 			await goCtx.languageClient.start();
 			goCtx.serverInfo = toServerInfo(goCtx.languageClient.initializeResult);
+
 			updateStatus(goCtx, goConfig, true);
 			console.log(`Server: ${JSON.stringify(goCtx.serverInfo, null, 2)}`);
 		} catch (e) {

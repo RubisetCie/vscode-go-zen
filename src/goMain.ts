@@ -52,7 +52,7 @@ import {
 	updateGlobalState
 } from './stateUtils';
 import { cancelRunningTests, showTestOutput } from './testUtils';
-import { cleanupTempDir, getBinPath, getToolsGopath, isGoPathSet, resolvePath } from './util';
+import { cleanupTempDir, getBinPath, getToolsGopath, isGoPathSet } from './util';
 import { clearCacheForTools } from './utils/pathUtils';
 import { WelcomePanel } from './welcome';
 import vscode = require('vscode');
@@ -64,7 +64,7 @@ import { killRunningPprof } from './goTest/profile';
 import { GoExplorerProvider } from './goExplorer';
 import { GoExtensionContext } from './context';
 import * as commands from './commands';
-import { toggleVulncheckCommandFactory, VulncheckOutputLinkProvider } from './goVulncheck';
+import { toggleVulncheckCommandFactory } from './goVulncheck';
 import { GoTaskProvider } from './goTaskProvider';
 
 const goCtx: GoExtensionContext = {};
@@ -93,7 +93,6 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 		await setGOROOTEnvVar(configGOROOT);
 	}
 
-	await showDeprecationWarning();
 	await updateGoVarsFromConfig(goCtx);
 
 	suggestUpdates();
@@ -109,20 +108,11 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 	initCoverageDecorators(ctx);
 
 	registerCommand('go.builds.run', commands.runBuilds);
-
-	const activeDoc = vscode.window.activeTextEditor?.document;
-	if (!goCtx.languageServerIsRunning && activeDoc?.languageId === 'go' && isGoPathSet()) {
-		// Check mod status so that cache is updated and then run build/lint/vet
-		isModSupported(activeDoc.uri).then(() => {
-			vscode.commands.executeCommand('go.builds.run', activeDoc, getGoConfig(activeDoc.uri));
-		});
-	}
-
 	registerCommand('go.environment.status', expandGoStatusBar);
 
 	GoRunTestCodeLensProvider.activate(ctx, goCtx);
 	GoDebugConfigurationProvider.activate(ctx, goCtx);
-	GoDebugFactory.activate(ctx);
+	GoDebugFactory.activate(ctx, goCtx);
 
 	goCtx.buildDiagnosticCollection = vscode.languages.createDiagnosticCollection('go');
 	ctx.subscriptions.push(goCtx.buildDiagnosticCollection);
@@ -138,10 +128,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 	registerCommand('go.locate.tools', commands.getConfiguredGoTools);
 	registerCommand('go.add.tags', commands.addTags);
 	registerCommand('go.remove.tags', commands.removeTags);
-	registerCommand('go.fill.struct', commands.runFillStruct);
 	registerCommand('go.impl.cursor', commands.implCursor);
-	registerCommand('go.godoctor.extract', commands.extractFunction);
-	registerCommand('go.godoctor.var', commands.extractVariable);
 	registerCommand('go.test.cursor', commands.testAtCursor('test'));
 	registerCommand('go.test.cursorOrPrevious', commands.testAtCursorOrPrevious('test'));
 	registerCommand('go.subtest.cursor', commands.subTestAtCursor('test'));
@@ -207,8 +194,6 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 
 	GoTaskProvider.setup(ctx, vscode.workspace);
 
-	// Vulncheck output link provider.
-	VulncheckOutputLinkProvider.activate(ctx);
 	registerCommand('go.vulncheck.toggle', toggleVulncheckCommandFactory);
 
 	return extensionAPI;
@@ -367,25 +352,4 @@ function lintDiagnosticCollectionName(lintToolName: string) {
 		return 'go-lint';
 	}
 	return `go-${lintToolName}`;
-}
-
-async function showDeprecationWarning() {
-	const cfg = getGoConfig();
-	const disableLanguageServer = cfg['useLanguageServer'];
-	if (disableLanguageServer === false) {
-		const promptKey = 'promptedLegacyLanguageServerDeprecation';
-		const prompted = getFromGlobalState(promptKey, false);
-		if (!prompted) {
-			const msg =
-				'When [go.useLanguageServer](command:workbench.action.openSettings?%5B%22go.useLanguageServer%22%5D) is false, IntelliSense, code navigation, and refactoring features for Go will stop working. Linting, debugging and testing other than debug/test code lenses will continue to work. Please see [Issue 2799](https://go.dev/s/vscode-issue/2799).';
-			const selected = await vscode.window.showInformationMessage(msg, 'Open settings', "Don't show again");
-			switch (selected) {
-				case 'Open settings':
-					vscode.commands.executeCommand('workbench.action.openSettings', 'go.useLanguageServer');
-					break;
-				case "Don't show again":
-					updateGlobalState(promptKey, true);
-			}
-		}
-	}
 }

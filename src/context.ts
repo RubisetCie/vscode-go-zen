@@ -18,7 +18,6 @@ export interface GoExtensionContext {
 	latestConfig?: LanguageServerConfig;
 	serverOutputChannel?: vscode.OutputChannel; // server-side output.
 	serverTraceChannel?: vscode.OutputChannel; // client-side tracing.
-	govulncheckOutputChannel?: vscode.OutputChannel; // govulncheck output.
 
 	languageServerIsRunning?: boolean;
 	// serverInfo is the information from the server received during initialization.
