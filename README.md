@@ -6,7 +6,7 @@ The [VS Code Go extension] provides rich language support for the [Go programmin
 
 To get started with Go Lang:
 
-1.  Install [Go](https://golang.org) 1.14 or newer if you haven't already.
+1.  Install [Go](https://go.dev) 1.18 or newer if you haven't already.
 
 1.  Install the [VS Code Go extension].
 

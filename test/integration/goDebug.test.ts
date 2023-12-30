@@ -18,17 +18,10 @@ import { DebugConfiguration, DebugProtocolMessage } from 'vscode';
 import { DebugClient } from '@vscode/debugadapter-testsupport';
 import { ILocation } from '@vscode/debugadapter-testsupport/lib/debugClient';
 import { DebugProtocol } from 'vscode-debugprotocol';
-import {
-	Delve,
-	escapeGoModPath,
-	GoDebugSession,
-	PackageBuildInfo,
-	RemoteSourcesAndPackages
-} from '../../src/debugAdapter/goDebug';
 import * as extConfig from '../../src/config';
 import { GoDebugConfigurationProvider, parseDebugProgramArgSync } from '../../src/goDebugConfiguration';
 import { getBinPath, rmdirRecursive } from '../../src/util';
-import { killProcessTree, killProcess } from '../../src/utils/processUtils';
+import { killProcessTree } from '../../src/utils/processUtils';
 import getPort = require('get-port');
 import util = require('util');
 import { TimestampedLogger } from '../../src/goLogging';
@@ -36,280 +29,6 @@ import { affectedByIssue832 } from './testutils';
 
 // For debugging test and streaming the trace instead of buffering, set this.
 const PRINT_TO_CONSOLE = false;
-
-suite('Path Manipulation Tests', () => {
-	test('escapeGoModPath works', () => {
-		assert.strictEqual(escapeGoModPath('BurnSushi/test.go'), '!burn!sushi/test.go');
-	});
-});
-
-suite('GoDebugSession Tests', async () => {
-	const workspaceFolder = '/usr/workspacefolder';
-	const delve: Delve = {} as Delve;
-	let goDebugSession: GoDebugSession;
-	let remoteSourcesAndPackages: RemoteSourcesAndPackages;
-	let fileSystem: typeof fs;
-
-	let previousEnv: any;
-
-	setup(() => {
-		previousEnv = Object.assign({}, process.env);
-
-		process.env.GOPATH = '/usr/gopath';
-		process.env.GOROOT = '/usr/goroot';
-		remoteSourcesAndPackages = new RemoteSourcesAndPackages();
-		// eslint-disable-next-line prettier/prettier
-		fileSystem = ({ existsSync: () => false } as unknown) as typeof fs;
-		delve.program = workspaceFolder;
-		delve.isApiV1 = false;
-		goDebugSession = new GoDebugSession(true, false, fileSystem);
-		goDebugSession['delve'] = delve;
-		goDebugSession['remoteSourcesAndPackages'] = remoteSourcesAndPackages;
-	});
-
-	teardown(() => {
-		process.env = previousEnv;
-		sinon.restore();
-	});
-
-	test('inferRemotePathFromLocalPath works', () => {
-		const sourceFileMapping = new Map<string, string[]>();
-		sourceFileMapping.set('main.go', ['/app/hello-world/main.go', '/app/main.go']);
-		sourceFileMapping.set('blah.go', ['/app/blah.go']);
-
-		remoteSourcesAndPackages.remoteSourceFilesNameGrouping = sourceFileMapping;
-
-		const inferredPath = goDebugSession['inferRemotePathFromLocalPath'](
-			'C:\\Users\\Documents\\src\\hello-world\\main.go'
-		);
-		assert.strictEqual(inferredPath, '/app/hello-world/main.go');
-	});
-
-	test('inferRemotePathFromLocalPath does not crash due to non-existing files', () => {
-		const sourceFileMapping = new Map<string, string[]>();
-		sourceFileMapping.set('main.go', ['/app/hello-world/main.go', '/app/main.go']);
-
-		remoteSourcesAndPackages.remoteSourceFilesNameGrouping = sourceFileMapping;
-
-		// Non-existing file.
-		const inferredPath = goDebugSession['inferRemotePathFromLocalPath'](
-			'C:\\Users\\Documents\\src\\hello-world\\main-copy.go'
-		);
-		assert.strictEqual(inferredPath, undefined);
-	});
-
-	test('inferLocalPathFromRemoteGoPackage works for package in workspaceFolder', () => {
-		const remotePath = '/src/hello-world/morestrings/morestrings.go';
-		const helloPackage: PackageBuildInfo = {
-			ImportPath: 'hello-world/morestrings',
-			DirectoryPath: '/src/hello-world/morestrings',
-			Files: ['/src/hello-world/morestrings/lessstrings.go', '/src/hello-world/morestrings/morestrings.go']
-		};
-
-		const testPackage: PackageBuildInfo = {
-			ImportPath: 'FooBar/test',
-			DirectoryPath: 'remote/pkg/mod/!foo!bar/test@v1.0.2',
-			Files: ['remote/pkg/mod/!foo!bar/test@v1.0.2/test.go']
-		};
-
-		const localPath = path.join(workspaceFolder, 'hello-world/morestrings/morestrings.go');
-		const existsSyncStub = sinon.stub(fileSystem, 'existsSync');
-		existsSyncStub.withArgs(localPath).returns(true);
-
-		remoteSourcesAndPackages.remotePackagesBuildInfo = [helloPackage, testPackage];
-
-		goDebugSession['localPathSeparator'] = '/';
-		const inferredLocalPath = goDebugSession['inferLocalPathFromRemoteGoPackage'](remotePath);
-		assert.strictEqual(inferredLocalPath, localPath);
-	});
-
-	test('inferLocalPathFromRemoteGoPackage works for package in GOPATH/pkg/mod', () => {
-		const remotePath = 'remote/pkg/mod/!foo!bar/test@v1.0.2/test.go';
-		const helloPackage: PackageBuildInfo = {
-			ImportPath: 'hello-world',
-			DirectoryPath: '/src/hello-world',
-			Files: ['src/hello-world/hello.go', 'src/hello-world/world.go']
-		};
-
-		const testPackage: PackageBuildInfo = {
-			ImportPath: 'FooBar/test',
-			DirectoryPath: 'remote/pkg/mod/!foo!bar/test@v1.0.2',
-			Files: ['remote/pkg/mod/!foo!bar/test@v1.0.2/test.go']
-		};
-
-		const localPath = path.join(process.env.GOPATH ?? '', 'pkg/mod/!foo!bar/test@v1.0.2/test.go');
-		const existsSyncStub = sinon.stub(fileSystem, 'existsSync');
-		existsSyncStub.withArgs(localPath).returns(true);
-
-		remoteSourcesAndPackages.remotePackagesBuildInfo = [helloPackage, testPackage];
-
-		goDebugSession['localPathSeparator'] = '/';
-		const inferredLocalPath = goDebugSession['inferLocalPathFromRemoteGoPackage'](remotePath);
-		assert.strictEqual(inferredLocalPath, localPath);
-	});
-
-	test('inferLocalPathFromRemoteGoPackage works for package in GOPATH/pkg/mod with relative path', () => {
-		const remotePath = '!foo!bar/test@v1.0.2/test.go';
-		const helloPackage: PackageBuildInfo = {
-			ImportPath: 'hello-world',
-			DirectoryPath: '/src/hello-world',
-			Files: ['src/hello-world/hello.go', 'src/hello-world/world.go']
-		};
-
-		const testPackage: PackageBuildInfo = {
-			ImportPath: 'FooBar/test',
-			DirectoryPath: '!foo!bar/test@v1.0.2',
-			Files: ['!foo!bar/test@v1.0.2/test.go']
-		};
-
-		const localPath = path.join(process.env.GOPATH ?? '', 'pkg/mod/!foo!bar/test@v1.0.2/test.go');
-		const existsSyncStub = sinon.stub(fileSystem, 'existsSync');
-		existsSyncStub.withArgs(localPath).returns(true);
-
-		remoteSourcesAndPackages.remotePackagesBuildInfo = [helloPackage, testPackage];
-
-		goDebugSession['localPathSeparator'] = '/';
-		const inferredLocalPath = goDebugSession['inferLocalPathFromRemoteGoPackage'](remotePath);
-		assert.strictEqual(inferredLocalPath, localPath);
-	});
-
-	test('inferLocalPathFromRemoteGoPackage works for package in GOPATH/src', () => {
-		const remotePath = 'remote/gopath/src/foobar/test@v1.0.2-abcde-34/test.go';
-		const helloPackage: PackageBuildInfo = {
-			ImportPath: 'hello-world',
-			DirectoryPath: '/src/hello-world',
-			Files: ['src/hello-world/hello.go', 'src/hello-world/world.go']
-		};
-
-		const testPackage: PackageBuildInfo = {
-			ImportPath: 'foobar/test',
-			DirectoryPath: 'remote/gopath/src/foobar/test@v1.0.2-abcde-34',
-			Files: ['remote/gopath/src/foobar/test@v1.0.2-abcde-34/test.go']
-		};
-
-		const localPath = path.join(process.env.GOPATH ?? '', 'src', 'foobar/test@v1.0.2-abcde-34/test.go');
-		const existsSyncStub = sinon.stub(fileSystem, 'existsSync');
-		existsSyncStub.withArgs(localPath).returns(true);
-
-		remoteSourcesAndPackages.remotePackagesBuildInfo = [helloPackage, testPackage];
-
-		goDebugSession['localPathSeparator'] = '/';
-		const inferredLocalPath = goDebugSession['inferLocalPathFromRemoteGoPackage'](remotePath);
-		assert.strictEqual(inferredLocalPath, localPath);
-	});
-
-	test('inferLocalPathFromRemoteGoPackage works for package in GOPATH/src with relative path', () => {
-		const remotePath = 'foobar/test@v1.0.2/test.go';
-		const helloPackage: PackageBuildInfo = {
-			ImportPath: 'hello-world',
-			DirectoryPath: '/src/hello-world',
-			Files: ['src/hello-world/hello.go', 'src/hello-world/world.go']
-		};
-
-		const testPackage: PackageBuildInfo = {
-			ImportPath: 'foobar/test',
-			DirectoryPath: 'foobar/test@v1.0.2',
-			Files: ['foobar/test@v1.0.2/test.go']
-		};
-
-		const localPath = path.join(process.env.GOPATH ?? '', 'src', 'foobar/test@v1.0.2/test.go');
-		const existsSyncStub = sinon.stub(fileSystem, 'existsSync');
-		existsSyncStub.withArgs(localPath).returns(true);
-
-		remoteSourcesAndPackages.remotePackagesBuildInfo = [helloPackage, testPackage];
-
-		goDebugSession['localPathSeparator'] = '/';
-		const inferredLocalPath = goDebugSession['inferLocalPathFromRemoteGoPackage'](remotePath);
-		assert.strictEqual(inferredLocalPath, localPath);
-	});
-
-	test('inferLocalPathFromRemoteGoPackage works for package in GOROOT/src', () => {
-		const remotePath = 'remote/goroot/src/foobar/test@v1.0.2/test.go';
-		const helloPackage: PackageBuildInfo = {
-			ImportPath: 'hello-world',
-			DirectoryPath: '/src/hello-world',
-			Files: ['src/hello-world/hello.go', 'src/hello-world/world.go']
-		};
-
-		const testPackage: PackageBuildInfo = {
-			ImportPath: 'foobar/test',
-			DirectoryPath: 'remote/goroot/src/foobar/test@v1.0.2',
-			Files: ['remote/goroot/src/foobar/test@v1.0.2/test.go']
-		};
-
-		const localPath = path.join(process.env.GOROOT ?? '', 'src', 'foobar/test@v1.0.2/test.go');
-		const existsSyncStub = sinon.stub(fileSystem, 'existsSync');
-		existsSyncStub.withArgs(localPath).returns(true);
-
-		remoteSourcesAndPackages.remotePackagesBuildInfo = [helloPackage, testPackage];
-
-		goDebugSession['localPathSeparator'] = '/';
-		const inferredLocalPath = goDebugSession['inferLocalPathFromRemoteGoPackage'](remotePath);
-		assert.strictEqual(inferredLocalPath, localPath);
-	});
-
-	test('inferLocalPathFromRemoteGoPackage works for package in GOROOT/src with relative path', () => {
-		const remotePath = 'foobar/test@v1.0.2/test.go';
-		const helloPackage: PackageBuildInfo = {
-			ImportPath: 'hello-world',
-			DirectoryPath: '/src/hello-world',
-			Files: ['src/hello-world/hello.go', 'src/hello-world/world.go']
-		};
-
-		const testPackage: PackageBuildInfo = {
-			ImportPath: 'foobar/test',
-			DirectoryPath: 'foobar/test@v1.0.2',
-			Files: ['foobar/test@v1.0.2/test.go']
-		};
-
-		const localPath = path.join(process.env.GOROOT ?? '', 'src', 'foobar/test@v1.0.2/test.go');
-		const existsSyncStub = sinon.stub(fileSystem, 'existsSync');
-		existsSyncStub.withArgs(localPath).returns(true);
-
-		remoteSourcesAndPackages.remotePackagesBuildInfo = [helloPackage, testPackage];
-
-		goDebugSession['localPathSeparator'] = '/';
-		const inferredLocalPath = goDebugSession['inferLocalPathFromRemoteGoPackage'](remotePath);
-		assert.strictEqual(inferredLocalPath, localPath);
-	});
-});
-
-suite('RemoteSourcesAndPackages Tests', () => {
-	const helloPackage: PackageBuildInfo = {
-		ImportPath: 'hello-world',
-		DirectoryPath: '/src/hello-world',
-		Files: ['src/hello-world/hello.go', 'src/hello-world/world.go']
-	};
-	const testPackage: PackageBuildInfo = {
-		ImportPath: 'test',
-		DirectoryPath: '/src/test',
-		Files: ['src/test/test.go']
-	};
-	const sources = ['src/hello-world/hello.go', 'src/hello-world/world.go', 'src/test/test.go'];
-	let remoteSourcesAndPackages: RemoteSourcesAndPackages;
-	let delve: Delve;
-	setup(() => {
-		// eslint-disable-next-line prettier/prettier
-		delve = ({ callPromise: () => ({}), isApiV1: false } as unknown) as Delve;
-		remoteSourcesAndPackages = new RemoteSourcesAndPackages();
-	});
-
-	teardown(() => {
-		sinon.restore();
-	});
-
-	test('initializeRemotePackagesAndSources retrieves remote packages and sources', async () => {
-		const stub = sinon.stub(delve, 'callPromise');
-		stub.withArgs('ListPackagesBuildInfo', [{ IncludeFiles: true }]).returns(
-			Promise.resolve({ List: [helloPackage, testPackage] })
-		);
-		stub.withArgs('ListSources', [{}]).returns(Promise.resolve({ Sources: sources }));
-
-		await remoteSourcesAndPackages.initializeRemotePackagesAndSources(delve);
-		assert.deepEqual(remoteSourcesAndPackages.remoteSourceFiles, sources);
-		assert.deepEqual(remoteSourcesAndPackages.remotePackagesBuildInfo, [helloPackage, testPackage]);
-	});
-});
 
 // Test suite adapted from:
 // https://github.com/microsoft/vscode-mock-debug/blob/master/src/tests/adapter.test.ts
@@ -2251,6 +1970,55 @@ const testAll = (ctx: Mocha.Context, isDlvDap: boolean, withConsole?: string) =>
 		});
 	});
 
+	suite('hideSystemGoroutines', () => {
+		if (!isDlvDap) {
+			return;
+		}
+		test('should toggle hiding system goroutines', async () => {
+			const PROGRAM = path.join(DATA_ROOT, 'baseTest');
+
+			const FILE = path.join(DATA_ROOT, 'baseTest', 'test.go');
+			const BREAKPOINT_LINE = 11;
+
+			const config = {
+				name: 'Launch',
+				type: 'go',
+				request: 'launch',
+				mode: 'debug',
+				program: PROGRAM,
+				hideSystemGoroutines: false
+			};
+			const debugConfig = await initializeDebugConfig(config);
+			await dc.hitBreakpoint(debugConfig, getBreakpointLocation(FILE, BREAKPOINT_LINE));
+			let threadsResponse = await dc.threadsRequest();
+			assert.ok(threadsResponse.success);
+			assert.ok(threadsResponse.body.threads.length > 1);
+
+			const toggle = () =>
+				Promise.all([
+					proxy.toggleHideSystemGoroutinesCustomRequest(async (command: string, args?: any) => {
+						return dc.customRequest(command, args).then((rsp) => {
+							return rsp.body;
+						});
+					}),
+					dc.waitForEvent('invalidated').then((event) => {
+						assert.strictEqual(event.body.areas.length, 1);
+						assert.strictEqual(event.body.areas[0], 'threads');
+					})
+				]);
+			// Toggle so only the main goroutine is shown.
+			await toggle();
+			threadsResponse = await dc.threadsRequest();
+			assert.ok(threadsResponse.success);
+			assert.strictEqual(threadsResponse.body.threads.length, 1);
+			// Toggle so all goroutines are shown again.
+			await toggle();
+			threadsResponse = await dc.threadsRequest();
+			assert.ok(threadsResponse.success);
+			assert.ok(threadsResponse.body.threads.length > 1);
+		});
+	});
+
 	let testNumber = 0;
 	async function initializeDebugConfig(config: DebugConfiguration, keepUserLogSettings?: boolean) {
 		// be explicit and prevent resolveDebugConfiguration from picking
@@ -2514,5 +2282,16 @@ function tryRmdirRecursive(dir: string) {
 		rmdirRecursive(dir);
 	} catch (e) {
 		console.log(`failed to delete ${dir}: ${e}`);
+	}
+}
+
+// Kill a process.
+function killProcess(p: cp.ChildProcess) {
+	if (p && p.pid && p.exitCode === null) {
+		try {
+			p.kill();
+		} catch (e) {
+			console.log(`Error killing process ${p.pid}: ${e}`);
+		}
 	}
 }
