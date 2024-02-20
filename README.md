@@ -10,9 +10,9 @@ To get started with Go Lang:
 
 1.  Install the [VS Code Go extension].
 
-1.  Open any directory or workspace containing Go code to automatically activate the extension. The [Go status bar](https://github.com/golang/vscode-go/wiki/ui) appears in the bottom left corner of the window and displays your Go version.
+1.  Open any Go file or go.mod file to automatically activate the extension. The [Go status bar](https://github.com/golang/vscode-go/wiki/ui) appears in the bottom right corner of the window and displays your Go version.
 
-1.  The extension depends on `go`, `gopls`, `dlv` and other optional tools. If any of the dependencies are missing, a warning will be displayed. Click on the warning to download dependencies.
+1.  The extension depends on `go`, `gopls` (the Go language server), and optional tools depending on your settings. If `gopls` is missing, the extension will try to install it. The :zap: sign next to the Go version indicates the language server is running, and you are ready to go.
 
 ## Code of Conduct
 
