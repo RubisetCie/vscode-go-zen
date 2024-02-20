@@ -19,16 +19,19 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
+          cache-dependency-path: 'extension'
 
       - name: Stamp Version
         run: |
+          cd extension
           cat package.json | jq --arg VER "${{ github.event.inputs.release_version }}" '.version=$VER' > /tmp/package.json 
           cp /tmp/package.json ./package.json
           npm ci
           npm run vscode:prepublish
 
       - name: Package extension
-        run: npx vsce package -o "./go-${{ github.event.inputs.release_version }}.vsix"
+        run: npx vsce package -o "../go-${{ github.event.inputs.release_version }}.vsix"
+        working-directory: 'extension'
 
       - name: Upload
         uses: actions/upload-artifact@v3

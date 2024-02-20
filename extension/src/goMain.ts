@@ -71,7 +71,6 @@ import { GoExtensionContext } from './context';
 import * as commands from './commands';
 import { toggleVulncheckCommandFactory } from './goVulncheck';
 import { GoTaskProvider } from './goTaskProvider';
-import { telemetryReporter } from './goTelemetry';
 
 const goCtx: GoExtensionContext = {};
 
@@ -108,7 +107,6 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 		ctx.extensionPath,
 		extensionInfo.isPreview
 	)
-		.then((path) => telemetryReporter.setTool(path))
 		.catch((reason) => console.error(reason));
 
 	const registerCommand = commands.createRegisterCommand(ctx, goCtx);
@@ -212,8 +210,6 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 
 	registerCommand('go.vulncheck.toggle', toggleVulncheckCommandFactory);
 
-	telemetryReporter.add(activationLatency(Date.now() - start), 1);
-
 	return extensionAPI;
 }
 
@@ -239,8 +235,7 @@ export function deactivate() {
 		cancelRunningTests(),
 		killRunningPprof(),
 		Promise.resolve(cleanupTempDir()),
-		Promise.resolve(disposeGoStatusBar()),
-		telemetryReporter.dispose()
+		Promise.resolve(disposeGoStatusBar())
 	]);
 }
 
