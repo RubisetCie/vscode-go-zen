@@ -49,6 +49,6 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v3
         with:
-          name: go-${{ github.event.inputs.release_version }}-zen
+          name: go-${{ github.event.inputs.release_version }}-zen-linux
           path: ./package
           if-no-files-found: error

@@ -9,16 +9,12 @@
 package vscgo
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"runtime/debug"
 	"strings"
-	"time"
-
-	"golang.org/x/telemetry/counter"
 )
 
 type command struct {
@@ -38,11 +34,6 @@ var allCommands []*command
 
 func init() {
 	allCommands = []*command{
-		{
-			usage: "inc_counters",
-			short: "increment telemetry counters",
-			run:   runIncCounters,
-		},
 		{
 			usage: "version",
 			short: "print version information",
@@ -68,7 +59,6 @@ func init() {
 }
 
 func Main() {
-	counter.Open()
 	log.SetFlags(0)
 	flag.Usage = usage
 	flag.Parse()
@@ -149,81 +139,6 @@ func help(name string) {
 		output()
 		cmd.flags.PrintDefaults()
 	}
-}
-
-// runIncCounters increments telemetry counters read from stdin.
-func runIncCounters(_ []string) error {
-	scanner := bufio.NewScanner(os.Stdin)
-	if counterFile := os.Getenv("TELEMETRY_COUNTER_FILE"); counterFile != "" {
-		return printCounter(counterFile, scanner)
-	}
-	return runIncCountersImpl(scanner, counter.Add)
-}
-
-func printCounter(fname string, scanner *bufio.Scanner) (rerr error) {
-	f, err := os.OpenFile(fname, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := f.Close(); rerr == nil {
-			rerr = err
-		}
-	}()
-	return runIncCountersImpl(scanner, func(name string, count int64) {
-		fmt.Fprintln(f, name, count)
-	})
-}
-
-const (
-	incCountersBadInput = "inc_counters_bad_input"
-)
-
-func incCountersInputLength(n int) string {
-	const name = "inc_counters_num_input"
-	for i := 1; i < 8; i *= 2 {
-		if n < i {
-			return fmt.Sprintf("%s:<%d", name, i)
-		}
-	}
-	return name + ":>=8"
-}
-
-func incCountersDuration(duration time.Duration) string {
-	const name = "inc_counters_duration"
-	switch {
-	case duration < 10*time.Millisecond:
-		return name + ":<10ms"
-	case duration < 100*time.Millisecond:
-		return name + ":<100ms"
-	case duration < 1*time.Second:
-		return name + ":<1s"
-	case duration < 10*time.Second:
-		return name + ":<10s"
-	}
-	return name + ":>=10s"
-}
-
-func runIncCountersImpl(scanner *bufio.Scanner, incCounter func(name string, count int64)) error {
-	start := time.Now()
-	linenum := 0
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		var name string
-		var count int64
-		if _, err := fmt.Sscanf(line, "%s %d", &name, &count); err != nil || count < 0 {
-			incCounter(incCountersBadInput, 1)
-			return fmt.Errorf("invalid line: %q", line)
-		}
-		linenum++
-		incCounter(name, int64(count))
-	}
-	incCounter(incCountersInputLength(linenum), 1)
-	incCounter(incCountersDuration(time.Since(start)), 1)
-	return nil
 }
 
 func runVersion(_ []string) error {
