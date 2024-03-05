@@ -148,51 +148,6 @@ export async function okForStagedRollout(
 	return true;
 }
 
-// scheduleGoplsSuggestions sets timeouts for the various gopls-specific
-// suggestions. We check user's gopls versions once per day to prompt users to
-// update to the latest version.
-export function scheduleGoplsSuggestions(goCtx: GoExtensionContext) {
-	if (extensionInfo.isInCloudIDE) {
-		return;
-	}
-	// Some helper functions.
-	const usingGo = (): boolean => {
-		return vscode.workspace.textDocuments.some((doc) => doc.languageId === 'go');
-	};
-	const installGopls = async (cfg: LanguageServerConfig) => {
-		const tool = getTool('gopls');
-		const versionToUpdate = await shouldUpdateLanguageServer(tool, cfg);
-		if (!versionToUpdate) {
-			return;
-		}
-		// If the user has opted in to automatic tool updates, we can update
-		// without prompting.
-		const toolsManagementConfig = getGoConfig()['toolsManagement'];
-		if (toolsManagementConfig && toolsManagementConfig['autoUpdate'] === true) {
-			if (extensionInfo.isPreview || (await okForStagedRollout(tool, versionToUpdate, hashMachineID))) {
-				const goVersion = await getGoVersion();
-				const toolVersion = { ...tool, version: versionToUpdate }; // ToolWithVersion
-				await installTools([toolVersion], goVersion, { silent: true });
-			} else {
-				console.log(`gopls ${versionToUpdate} is too new, try to update later`);
-			}
-		} else {
-			promptForUpdatingTool(tool.name, versionToUpdate);
-		}
-	};
-	const update = async () => {
-		setTimeout(update, timeDay);
-		const cfg = goCtx.latestConfig;
-		// trigger periodic update check only if the user is already using gopls.
-		// Otherwise, let's check again tomorrow.
-		if (!cfg || !cfg.enabled || cfg.serverName !== 'gopls') {
-			return;
-		}
-		await installGopls(cfg);
-	};
-	setTimeout(update, 10 * timeMinute);
-}
-
 export interface GoplsOptOutConfig {
 	prompt?: boolean;
 	lastDatePrompted?: Date;

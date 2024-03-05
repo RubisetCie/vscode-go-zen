@@ -15,7 +15,6 @@ import {
 	buildLanguageServerConfig,
 	errorKind,
 	RestartReason,
-	scheduleGoplsSuggestions,
 	stopLanguageClient,
 	suggestGoplsIssueReport,
 	toServerInfo,
@@ -62,12 +61,6 @@ export const startLanguageServer: CommandFactory = (ctx, goCtx) => {
 
 			if (!shouldActivateLanguageFeatures()) {
 				return;
-			}
-
-			// We have some extra prompts for gopls users and for people who have opted
-			// out of gopls.
-			if (reason === RestartReason.ACTIVATION) {
-				scheduleGoplsSuggestions(goCtx);
 			}
 
 			if (!cfg.enabled) {

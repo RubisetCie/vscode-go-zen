@@ -1,4 +1,4 @@
-name: Build Release
+name: Build Release (Linux)
 on:
   workflow_dispatch:
     inputs:
@@ -21,6 +21,11 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'extension'
 
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '>=1.21.0'
+
       - name: Stamp Version
         run: |
           cd extension
@@ -29,13 +34,21 @@ jobs:
           npm ci
           npm run vscode:prepublish
 
-      - name: Package extension
-        run: npx vsce package -o "../go-${{ github.event.inputs.release_version }}.vsix"
+      - name: Package Extension
+        run: |
+          mkdir ../package
+          npx vsce package -o "../package/go-${{ github.event.inputs.release_version }}.vsix"
         working-directory: 'extension'
+
+      - name: Package VSCGO
+        run: |
+          go build -ldflags '-s -w'
+          mv vscgo ../package
+        working-directory: 'vscgo'
 
       - name: Upload
         uses: actions/upload-artifact@v3
         with:
-          name: go-${{ github.event.inputs.release_version }}-zen.vsix
-          path: ./go-${{ github.event.inputs.release_version }}.vsix
+          name: go-${{ github.event.inputs.release_version }}-zen
+          path: ./package
           if-no-files-found: error
