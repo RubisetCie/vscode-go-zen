@@ -1,8 +1,7 @@
 module github.com/golang/vscode-go
 
-go 1.21
+go 1.23.1
 
-require (
-	golang.org/x/mod v0.14.0 // indirect
-	golang.org/x/sys v0.16.0 // indirect
-)
+require github.com/google/pprof v0.0.0-20240727154555-813a5fbdbec8
+
+require golang.org/x/sys v0.26.0 // indirect
