@@ -64,22 +64,35 @@ import vscode = require('vscode');
 import { getFormatTool } from './language/legacy/goFormat';
 import { ExtensionAPI } from './export';
 import extensionAPI from './extensionAPI';
-import { GoTestExplorer, isVscodeTestingAPIAvailable } from './goTest/explore';
+import { GoTestExplorer } from './goTest/explore';
 import { killRunningPprof } from './goTest/profile';
 import { GoExplorerProvider } from './goExplorer';
 import { GoExtensionContext } from './context';
 import * as commands from './commands';
 import { toggleVulncheckCommandFactory } from './goVulncheck';
 import { GoTaskProvider } from './goTaskProvider';
+import { experiments } from './experimental';
 
 const goCtx: GoExtensionContext = {};
 
-export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionAPI | undefined> {
-	if (process.env['VSCODE_GO_IN_TEST'] === '1') {
-		// Make sure this does not run when running in test.
-		return;
-	}
+// Allow tests to access the extension context utilities.
+interface ExtensionTestAPI {
+	globalState: vscode.Memento;
+}
 
+export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionAPI | ExtensionTestAPI | undefined> {
+	if (process.env['VSCODE_GO_IN_TEST'] === '1') {
+		// TODO: VSCODE_GO_IN_TEST was introduced long before we learned about
+		// ctx.extensionMode, and used in multiple places.
+		// Investigate if use of VSCODE_GO_IN_TEST can be removed
+		// in favor of ctx.extensionMode and clean up.
+		if (ctx.extensionMode === vscode.ExtensionMode.Test) {
+			return { globalState: ctx.globalState };
+		}
+		// We shouldn't expose the memento in production mode even when VSCODE_GO_IN_TEST
+		// environment variable is set.
+		return; // Skip the remaining activation work.
+	}
 	const start = Date.now();
 	setGlobalState(ctx.globalState);
 	setWorkspaceState(ctx.workspaceState);
@@ -130,6 +143,9 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 	GoRunTestCodeLensProvider.activate(ctx, goCtx);
 	GoDebugConfigurationProvider.activate(ctx, goCtx);
 	GoDebugFactory.activate(ctx, goCtx);
+	experiments.activate(ctx);
+	GoTestExplorer.setup(ctx, goCtx);
+	GoExplorerProvider.setup(ctx);
 
 	goCtx.buildDiagnosticCollection = vscode.languages.createDiagnosticCollection('go');
 	ctx.subscriptions.push(goCtx.buildDiagnosticCollection);
@@ -167,12 +183,6 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 	registerCommand('go.add.package.workspace', addImportToWorkspace);
 	registerCommand('go.tools.install', commands.installTools);
 	registerCommand('go.browse.packages', browsePackages);
-
-	if (isVscodeTestingAPIAvailable && cfg.get<boolean>('testExplorer.enable')) {
-		GoTestExplorer.setup(ctx, goCtx);
-	}
-
-	GoExplorerProvider.setup(ctx);
 
 	registerCommand('go.test.generate.package', goGenerateTests.generateTestCurrentPackage);
 	registerCommand('go.test.generate.file', goGenerateTests.generateTestCurrentFile);
@@ -214,22 +224,6 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<ExtensionA
 	registerCommand('go.vulncheck.toggle', toggleVulncheckCommandFactory);
 
 	return extensionAPI;
-}
-
-function activationLatency(duration: number): string {
-	// TODO: generalize and move to goTelemetry.ts
-	let bucket = '>=5s';
-
-	if (duration < 100) {
-		bucket = '<100ms';
-	} else if (duration < 500) {
-		bucket = '<500ms';
-	} else if (duration < 1000) {
-		bucket = '<1s';
-	} else if (duration < 5000) {
-		bucket = '<5s';
-	}
-	return 'activation_latency:' + bucket;
 }
 
 export function deactivate() {
@@ -307,15 +301,6 @@ function addOnDidChangeConfigListeners(ctx: vscode.ExtensionContext) {
 					ctx.subscriptions.push(goCtx.lintDiagnosticCollection);
 					// TODO: actively maintain our own disposables instead of keeping pushing to ctx.subscription.
 				}
-			}
-			if (e.affectsConfiguration('go.testExplorer.enable')) {
-				const msg =
-					'Go test explorer has been enabled or disabled. For this change to take effect, the window must be reloaded.';
-				vscode.window.showInformationMessage(msg, 'Reload').then((selected) => {
-					if (selected === 'Reload') {
-						vscode.commands.executeCommand('workbench.action.reloadWindow');
-					}
-				});
 			}
 		})
 	);

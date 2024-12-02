@@ -20,32 +20,23 @@ export interface Tool {
 	replacedByGopls?: boolean;
 	description: string;
 
-	// If true, consider prerelease version in preview mode
-	// (nightly & dev)
+	// If true, consider prerelease version in prerelease mode
+	// (prerelease & dev)
 	usePrereleaseInPreviewMode?: boolean;
 	// If set, this string will be used when installing the tool
 	// instead of the default 'latest'. It can be used when
-	// we need to pin a tool version (`deadbeaf`) or to use
+	// we need to pin a tool version (`deadbeef`) or to use
 	// a dev version available in a branch (e.g. `master`).
 	defaultVersion?: string;
 
 	// latestVersion and latestVersionTimestamp are hardcoded default values
-	// for the last known version of the given tool. We also hardcode values
-	// for the latest known pre-release of the tool for the Nightly extension.
+	// for the last known version of the given tool.
 	latestVersion?: semver.SemVer | null;
 	latestVersionTimestamp?: moment.Moment;
-	latestPrereleaseVersion?: semver.SemVer | null;
-	latestPrereleaseVersionTimestamp?: moment.Moment;
 
-	// minimumGoVersion and maximumGoVersion set the range for the versions of
-	// Go with which this tool can be used.
+	// minimumGoVersion sets the minimum required version of Go
+	// for the tool.
 	minimumGoVersion?: semver.SemVer | null;
-	maximumGoVersion?: semver.SemVer | null;
-
-	// close performs any shutdown tasks that a tool must execute before a new
-	// version is installed. It returns a string containing an error message on
-	// failure.
-	close?: (env: NodeJS.Dict<string>) => Promise<string>;
 }
 
 /**
@@ -59,7 +50,7 @@ export interface ToolAtVersion extends Tool {
 export function getImportPathWithVersion(
 	tool: Tool,
 	version: semver.SemVer | string | undefined | null,
-	goVersion: GoVersion
+	goVersion: GoVersion // This is the Go version to build the project.
 ): string {
 	const importPath = tool.importPath;
 	if (version) {
@@ -69,17 +60,24 @@ export function getImportPathWithVersion(
 			return importPath + '@' + version;
 		}
 	}
+	if (tool.name === 'gopls') {
+		if (goVersion.lt('1.19')) return importPath + '@v0.14.2';
+		if (goVersion.lt('1.21')) return importPath + '@v0.15.3';
+	}
+	if (tool.name === 'dlv') {
+		if (goVersion.lt('1.19')) return importPath + '@v1.20.2';
+		if (goVersion.lt('1.21')) return importPath + '@v1.22.1';
+	}
 	if (tool.name === 'staticcheck') {
-		if (goVersion.lt('1.17')) return importPath + '@v0.2.2';
 		if (goVersion.lt('1.19')) return importPath + '@v0.3.3';
+		if (goVersion.lt('1.21')) return importPath + '@v0.4.7';
 	}
 	if (tool.name === 'gofumpt') {
-		if (goVersion.lt('1.18')) return importPath + '@v0.2.1';
-		if (goVersion.lt('1.19')) return importPath + '@v0.4.0';
-		if (goVersion.lt('1.20')) return importPath + '@v0.5.0';
+		if (goVersion.lt('1.19')) return importPath + '@v0.4.0'; // pre-go1.19
+		if (goVersion.lt('1.20')) return importPath + '@v0.5.0'; // go1.19
+		if (goVersion.lt('1.22')) return importPath + '@v0.6.0'; // go1.20~1.21
 	}
 	if (tool.name === 'golangci-lint') {
-		if (goVersion.lt('1.18')) return importPath + '@v1.47.3';
 		if (goVersion.lt('1.20')) return importPath + '@v1.53.3';
 		if (goVersion.lt('1.21')) return importPath + '@v1.55.2';
 	}

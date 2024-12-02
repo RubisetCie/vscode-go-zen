@@ -1,4 +1,4 @@
-// Copyright 2023 The Go Authors. All rights reserved.
+// Copyright 2024 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -34,6 +34,18 @@ var allCommands []*command
 
 func init() {
 	allCommands = []*command{
+		{
+			usage:   "dump-pprof <profile>",
+			short:   "convert a pprof profile to a JSON file",
+			hasArgs: true,
+			run:     runPprofDump,
+		},
+		{
+			usage:   "serve-pprof <addr> <profile>",
+			short:   "serve a pprof profile",
+			hasArgs: true,
+			run:     runPprofServe,
+		},
 		{
 			usage: "version",
 			short: "print version information",

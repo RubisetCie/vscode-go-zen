@@ -11,6 +11,10 @@ import { Env } from './goplsTestEnv.utils';
 import { updateGoVarsFromConfig } from '../../src/goInstallTools';
 
 suite('Go Test Runner', () => {
+	// updateGoVarsFromConfig mutates process.env. Restore the cached
+	// prevEnv when teardown.
+	// TODO: avoid updateGoVarsFromConfig call.
+	const prevEnv = Object.assign({}, process.env);
 	const fixtureDir = path.join(__dirname, '..', '..', '..', 'test', 'testdata');
 
 	let testExplorer: GoTestExplorer;
@@ -18,11 +22,15 @@ suite('Go Test Runner', () => {
 	suiteSetup(async () => {
 		await updateGoVarsFromConfig({});
 	});
+	suiteTeardown(() => {
+		process.env = prevEnv;
+	});
 
 	suite('parseOutput', () => {
 		const ctx = MockExtensionContext.new();
 		suiteSetup(async () => {
-			testExplorer = GoTestExplorer.setup(ctx, {});
+			testExplorer = GoTestExplorer.new(ctx, {});
+			ctx.subscriptions.push(testExplorer);
 		});
 		suiteTeardown(() => ctx.teardown());
 
@@ -68,7 +76,8 @@ suite('Go Test Runner', () => {
 		suiteSetup(async () => {
 			uri = Uri.file(path.join(fixtureDir, 'codelens', 'codelens2_test.go'));
 			await env.startGopls(uri.fsPath);
-			testExplorer = GoTestExplorer.setup(ctx, env.goCtx);
+			testExplorer = GoTestExplorer.new(ctx, env.goCtx);
+			ctx.subscriptions.push(testExplorer);
 
 			await forceDidOpenTextDocument(workspace, testExplorer, uri);
 		});
@@ -170,10 +179,13 @@ suite('Go Test Runner', () => {
 	});
 
 	suite('Subtest', function () {
+		// This test is slow, especially on Windows.
 		// WARNING: each call to testExplorer.runner.run triggers one or more
 		// `go test` command runs (testUtils.goTest is spied, not mocked or replaced).
 		// Each `go test` command invocation can take seconds on slow machines.
 		// As we add more cases, the timeout should be increased accordingly.
+		this.timeout(20000); // I don't know why but timeout chained after `suite` didn't work.
+
 		const sandbox = sinon.createSandbox();
 		const subTestDir = path.join(fixtureDir, 'subTest');
 		const ctx = MockExtensionContext.new();
@@ -189,7 +201,8 @@ suite('Go Test Runner', () => {
 			// (so initialize request doesn't include workspace dir info). The codelens directory was
 			// used in the previous test suite. Figure out why.
 			await env.startGopls(uri.fsPath, undefined, subTestDir);
-			testExplorer = GoTestExplorer.setup(ctx, env.goCtx);
+			testExplorer = GoTestExplorer.new(ctx, env.goCtx);
+			ctx.subscriptions.push(testExplorer);
 			await forceDidOpenTextDocument(workspace, testExplorer, uri);
 
 			spy = sandbox.spy(testUtils, 'goTest');
@@ -204,7 +217,6 @@ suite('Go Test Runner', () => {
 		});
 
 		test('discover and run', async () => {
-			console.log('discover and run');
 			// Locate TestMain and TestOther
 			const tests = testExplorer.resolver.find(uri).filter((x) => GoTest.parseId(x.id).kind === 'test');
 			tests.sort((a, b) => a.label.localeCompare(b.label));
@@ -284,6 +296,6 @@ suite('Go Test Runner', () => {
 				'Failed to execute `go test`'
 			);
 			assert.strictEqual(spy.callCount, 0, 'expected no calls to goTest');
-		}).timeout(10000);
+		});
 	});
 });

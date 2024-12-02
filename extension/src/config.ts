@@ -5,6 +5,7 @@
  *--------------------------------------------------------*/
 
 import vscode = require('vscode');
+import semver = require('semver');
 import { extensionId } from './const';
 
 /** getGoConfig is declared as an exported const rather than a function, so it can be stubbbed in testing. */
@@ -34,16 +35,22 @@ export class ExtensionInfo {
 	readonly version?: string;
 	/** The application name of the editor, like 'VS Code' */
 	readonly appName: string;
-	/** True if the extension runs in preview mode (e.g. Nightly) */
+	/** True if the extension runs in preview mode (e.g. Nightly, prerelease) */
 	readonly isPreview: boolean;
 	/** True if the extension runs in well-kwnon cloud IDEs */
 	readonly isInCloudIDE: boolean;
 
 	constructor() {
 		const packageJSON = vscode.extensions.getExtension(extensionId)?.packageJSON;
-		this.version = packageJSON?.version;
+		const version = semver.parse(packageJSON?.version);
+		this.version = version?.format();
 		this.appName = vscode.env.appName;
-		this.isPreview = !!packageJSON?.preview;
+
+		// golang.go prerelease: minor version is an odd number, or has the "-dev" suffix.
+		this.isPreview =
+			extensionId === 'golang.go' && !!version
+				? version.minor % 2 === 1 || version.toString().endsWith('-dev')
+				: false;
 		this.isInCloudIDE =
 			process.env.CLOUD_SHELL === 'true' ||
 			process.env.MONOSPACE_ENV === 'true' ||
