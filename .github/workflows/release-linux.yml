@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v3
@@ -47,8 +47,10 @@ jobs:
         working-directory: 'vscgo'
 
       - name: Upload
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: go-${{ github.event.inputs.release_version }}-zen-linux
           path: ./package
+          overwrite: true
+          compression-level: 9
           if-no-files-found: error
